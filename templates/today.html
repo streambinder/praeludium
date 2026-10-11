@@ -64,6 +64,9 @@
 </div></details>
 </section>
 
+<script>
+var L = { neverTouched: {{t "js.never_touched"}}, saved: {{t "js.saved"}}, errorRetry: {{t "js.error_retry"}}, progressFmt: {{t "today.x_of_y"}}, start: {{t "timer.start"}}, pause: {{t "timer.pause"}}, resume: {{t "timer.resume"}}, skipConfirm: {{t "today.skip_confirm"}} };
+</script>
 {{if .Baseline}}
 <section id="baseline" data-done="{{.BaselineDone}}" data-total="{{.BaselineTotal}}">
 <div class="section-head"><h2>{{t "today.baseline_title"}}</h2><span class="meta"><span id="base-progress">{{t "today.x_of_y" .BaselineDone .BaselineTotal}}</span> {{t "today.pieces_declared"}}</span></div>
@@ -78,7 +81,6 @@
 {{end}}
 </section>
 <script>
-var L = { neverTouched: {{t "js.never_touched" | printf "%q"}}, saved: {{t "js.saved" | printf "%q"}}, errorRetry: {{t "js.error_retry" | printf "%q"}}, progressFmt: {{t "today.x_of_y" | printf "%q"}}, start: {{t "timer.start" | printf "%q"}}, pause: {{t "timer.pause" | printf "%q"}}, resume: {{t "timer.resume" | printf "%q"}}, skipConfirm: {{t "today.skip_confirm" | printf "%q"}} };
 (function() {
   var section = document.getElementById('baseline');
   var baseDone = parseInt(section.dataset.done, 10) || 0;
