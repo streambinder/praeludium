@@ -790,6 +790,12 @@ a.card-link:hover {
   margin: 1.8rem 0 0.9rem;
 }
 
+/* Inside a panel the head needs no top margin: the panel padding
+   already separates it, and top and bottom stay balanced. */
+.panel > .section-head:first-child {
+  margin-top: 0;
+}
+
 .section-head h2 {
   margin: 0;
 }
