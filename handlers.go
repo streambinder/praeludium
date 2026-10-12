@@ -1763,7 +1763,12 @@ func (a *App) handleDiary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	a.render(w, r, "diary.html", map[string]any{"Title": tr(langFor(r), "nav.diary"), "Nav": "diary", "Days": days, "PrepMap": prep, "PrepMapMobile": prepMobile, "Chips": chips, "TuttiOn": len(valid) == 0, "Filtered": len(valid) > 0})
+	stats, err := a.diaryStats(langFor(r))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.render(w, r, "diary.html", map[string]any{"Title": tr(langFor(r), "nav.diary"), "Nav": "diary", "Days": days, "PrepMap": prep, "PrepMapMobile": prepMobile, "Chips": chips, "TuttiOn": len(valid) == 0, "Filtered": len(valid) > 0, "Stats": stats})
 }
 
 type dayPiece struct {

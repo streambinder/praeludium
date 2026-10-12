@@ -1674,3 +1674,90 @@ a:hover {
     font-size: 0.62rem;
   }
 }
+
+/* Diary statistics charts. */
+.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 0.4rem;
+}
+
+.chart text {
+  font-family: var(--font-body);
+  fill: var(--muted);
+  font-size: 9.5px;
+}
+
+.chart .count {
+  fill: var(--ink);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.chart .grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.chart .axis {
+  stroke: #d8cfb8;
+  stroke-width: 1;
+}
+
+.chart .bar {
+  fill: var(--accent);
+  opacity: 0.88;
+}
+
+.chart polyline {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart .mean {
+  stroke: var(--accent);
+}
+
+.chart .hi {
+  stroke: #7ea26d;
+  stroke-dasharray: 6 4;
+}
+
+.chart .lo {
+  stroke: #c99a5b;
+  stroke-dasharray: 6 4;
+}
+
+.chart circle {
+  fill: var(--accent);
+  cursor: pointer;
+}
+
+.stats-legend {
+  display: flex;
+  gap: 1.1rem;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.stats-legend .sw {
+  display: inline-block;
+  width: 22px;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+  border-top: 3px solid var(--accent);
+}
+
+.stats-legend .sw.hi {
+  border-top-color: #7ea26d;
+  border-top-style: dashed;
+}
+
+.stats-legend .sw.lo {
+  border-top-color: #c99a5b;
+  border-top-style: dashed;
+}

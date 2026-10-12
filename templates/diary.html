@@ -35,6 +35,38 @@
 <p class="empty">{{t "diary.no_pieces_filter"}}</p>
 {{end}}
 
+{{if or .Stats.HasDist .Stats.HasWeeks}}
+<section>
+<div class="section-head"><h2>{{t "stats.title"}}</h2></div>
+{{if .Stats.HasDist}}
+<div class="panel reveal">
+<div class="section-head"><h2>{{t "stats.dist_title"}}</h2><span class="meta">{{tp "pieces.count" .Stats.DistPieces}}</span></div>
+<p class="empty-note">{{t "stats.dist_note"}}</p>
+<svg viewBox="0 0 740 190" class="chart" role="img" aria-label="{{t "stats.dist_title"}}">
+{{range .Stats.Dist.Bars}}<rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="4" class="bar"/><text x="{{.CX}}" y="{{.CountY}}" text-anchor="middle" class="count">{{.Count}}</text><text x="{{.CX}}" y="172" text-anchor="middle">{{.Label}}</text>{{end}}
+</svg>
+</div>
+{{end}}
+{{if .Stats.HasWeeks}}
+<div class="panel reveal">
+<div class="section-head"><h2>{{t "stats.hours_title"}}</h2></div>
+<p class="empty-note">{{t "stats.hours_note"}}</p>
+<svg viewBox="0 0 740 176" class="chart" role="img" aria-label="{{t "stats.hours_title"}}">
+{{range .Stats.Weeks.Grid}}<line x1="26" x2="712" y1="{{.Y}}" y2="{{.Y}}" class="grid"/><text x="18" y="{{.Y}}" dy="3.5" text-anchor="end">{{.Label}}</text>{{end}}
+<line x1="26" x2="26" y1="10" y2="138" class="axis"/>
+<polyline points="{{.Stats.Weeks.HiPts}}" class="hi"/>
+<polyline points="{{.Stats.Weeks.LoPts}}" class="lo"/>
+<polyline points="{{.Stats.Weeks.MeanPts}}" class="mean"/>
+{{range .Stats.Weeks.Dots}}<circle cx="{{.X}}" cy="{{.Y}}" r="4"><title>{{.Title}}</title></circle>{{end}}
+<text x="{{.Stats.Weeks.FirstX}}" y="162" text-anchor="middle">{{dateDMY .Stats.Weeks.First}}</text>
+{{if not .Stats.Weeks.Single}}<text x="{{.Stats.Weeks.LastX}}" y="162" text-anchor="middle">{{dateDMY .Stats.Weeks.Last}}</text>{{end}}
+</svg>
+<div class="stats-legend"><span><i class="sw mean"></i>{{t "stats.mean"}}</span><span><i class="sw hi"></i>{{t "stats.p95"}}</span><span><i class="sw lo"></i>{{t "stats.p05"}}</span></div>
+</div>
+{{end}}
+</section>
+{{end}}
+
 <div class="stack">
 {{range .Days}}
 <a class="card reveal day-link" href="/diary/day/{{.Date}}">
