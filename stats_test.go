@@ -32,16 +32,19 @@ func TestPercentile(t *testing.T) {
 }
 
 func TestDistBucketAndLabel(t *testing.T) {
-	cases := map[int]int{1: 0, 59: 0, 60: 1, 119: 1, 120: 2, 239: 2, 240: 3, 479: 3, 480: 4, 5000: 4}
+	cases := map[int]int{1: 0, 14: 0, 15: 1, 29: 1, 30: 2, 59: 2, 60: 3, 119: 3, 120: 4, 240: 4, 5000: 4}
 	for minutes, want := range cases {
 		if got := distBucket(minutes); got != want {
 			t.Errorf("distBucket(%d) = %d, want %d", minutes, got, want)
 		}
 	}
-	if got := distLabel(0); got != "< 1:00h" {
+	if got := distLabel(0); got != "< 15m" {
 		t.Errorf("label 0 = %q", got)
 	}
-	if got := distLabel(4); got != "> 8:00h" {
+	if got := distLabel(1); got != "15m–30m" {
+		t.Errorf("label 1 = %q", got)
+	}
+	if got := distLabel(4); got != "2:00h–4:00h" {
 		t.Errorf("label 4 = %q", got)
 	}
 }

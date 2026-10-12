@@ -12,30 +12,24 @@ import (
 // daily study hours evolve week by week. Charts are precomputed SVG
 // coordinates, in the same style as the confidence sparkline.
 
-// distBucket bounds in minutes: [<60, 60-120, 120-240, 240-480, >=480].
-var distBounds = []int{60, 120, 240, 480}
+// distEdges are the distribution band edges in minutes: five bands
+// from 0-15 up to 120-240; totals above the last edge stay in the
+// last band.
+var distEdges = []int{0, 15, 30, 60, 120, 240}
 
 func distBucket(minutes int) int {
-	for i, b := range distBounds {
-		if minutes < b {
-			return i
-		}
+	b := 0
+	for b < len(distEdges)-2 && minutes >= distEdges[b+1] {
+		b++
 	}
-	return len(distBounds)
+	return b
 }
 
 func distLabel(bucket int) string {
-	lo := 0
-	if bucket > 0 {
-		lo = distBounds[bucket-1]
-	}
-	if bucket == len(distBounds) {
-		return "> " + dur(lo)
-	}
 	if bucket == 0 {
-		return "< " + dur(distBounds[0])
+		return "< " + dur(distEdges[1])
 	}
-	return dur(lo) + "–" + dur(distBounds[bucket])
+	return dur(distEdges[bucket]) + "–" + dur(distEdges[bucket+1])
 }
 
 // percentile returns the p-th percentile (0-100) of sorted values with
@@ -127,7 +121,7 @@ type distChart struct {
 }
 
 func buildDistChart(totals []int) distChart {
-	counts := make([]int, len(distBounds)+1)
+	counts := make([]int, len(distEdges)-1)
 	maxCount := 0
 	for _, tot := range totals {
 		if tot <= 0 {
