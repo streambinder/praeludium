@@ -65,9 +65,9 @@ type dayTotal struct {
 // weekPoint aggregates one ISO week: the daily study hours of the days
 // that have study time, as mean and percentile band.
 type weekPoint struct {
-	Monday     string // ISO date of the week's Monday
+	Monday         string // ISO date of the week's Monday
 	Mean, P95, P05 float64
-	Days       int
+	Days           int
 }
 
 func aggregateWeeks(days []dayTotal) []weekPoint {
@@ -228,7 +228,7 @@ func buildWeekChart(weeks []weekPoint, lang string) weekChart {
 	}
 	if n > 0 {
 		chart.First, chart.Last = weeks[0].Monday, weeks[n-1].Monday
-		chart.FirstX, chart.LastX = f1s(x(0)), f1s(x(n - 1))
+		chart.FirstX, chart.LastX = f1s(x(0)), f1s(x(n-1))
 		chart.Single = n == 1
 	}
 	return chart
