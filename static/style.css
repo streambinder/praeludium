@@ -1761,3 +1761,46 @@ a:hover {
   border-top-color: #c99a5b;
   border-top-style: dashed;
 }
+
+.stat-rows {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.4rem;
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) 2fr auto;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.9rem;
+}
+
+.stat-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-track {
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(138, 90, 46, 0.12);
+  overflow: hidden;
+}
+
+.stat-fill {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--accent);
+}
+
+.stat-fill.cov {
+  background: #7ea26d;
+}
+
+.stat-val {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

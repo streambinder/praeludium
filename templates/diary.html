@@ -35,7 +35,7 @@
 <p class="empty">{{t "diary.no_pieces_filter"}}</p>
 {{end}}
 
-{{if or .Stats.HasDist .Stats.HasWeeks}}
+{{if or .Stats.HasDist .Stats.HasWeeks .Stats.Auditions .Stats.Coverage .Stats.HasConf .Stats.HasConst}}
 <section>
 <div class="section-head"><h2>{{t "stats.title"}}</h2></div>
 {{if .Stats.HasDist}}
@@ -62,6 +62,47 @@
 {{if not .Stats.Weeks.Single}}<text x="{{.Stats.Weeks.LastX}}" y="162" text-anchor="middle">{{dateDMY .Stats.Weeks.Last}}</text>{{end}}
 </svg>
 <div class="stats-legend"><span><i class="sw mean"></i>{{t "stats.mean"}}</span><span><i class="sw hi"></i>{{t "stats.p95"}}</span><span><i class="sw lo"></i>{{t "stats.p05"}}</span></div>
+</div>
+{{end}}
+{{if .Stats.Auditions}}
+<div class="panel reveal">
+<div class="section-head"><h2>{{t "stats.aud_title"}}</h2></div>
+<p class="empty-note">{{t "stats.aud_note"}}</p>
+<div class="stat-rows">
+{{range .Stats.Auditions}}<div class="stat-row"><span class="stat-name">{{.Name}}</span><span class="stat-track"><span class="stat-fill" style="width:{{.Pct}}%"></span></span><span class="stat-val">{{.Val}}</span></div>{{end}}
+</div>
+</div>
+{{end}}
+{{if .Stats.Coverage}}
+<div class="panel reveal">
+<div class="section-head"><h2>{{t "stats.cov_title"}}</h2></div>
+<p class="empty-note">{{t "stats.cov_note"}}</p>
+<div class="stat-rows">
+{{range .Stats.Coverage}}<div class="stat-row"><span class="stat-name">{{.Name}}</span><span class="stat-track"><span class="stat-fill cov" style="width:{{.Pct}}%"></span></span><span class="stat-val">{{.Val}}</span></div>{{end}}
+</div>
+</div>
+{{end}}
+{{if .Stats.HasConf}}
+<div class="panel reveal">
+<div class="section-head"><h2>{{t "stats.conf_title"}}</h2></div>
+<p class="empty-note">{{t "stats.conf_note"}}</p>
+<svg viewBox="0 0 740 176" class="chart" role="img" aria-label="{{t "stats.conf_title"}}">
+{{range .Stats.Conf.Grid}}<line x1="26" x2="712" y1="{{.Y}}" y2="{{.Y}}" class="grid"/><text x="18" y="{{.Y}}" dy="3.5" text-anchor="end">{{.Label}}</text>{{end}}
+<line x1="26" x2="26" y1="10" y2="138" class="axis"/>
+<polyline points="{{.Stats.Conf.MeanPts}}" class="mean"/>
+{{range .Stats.Conf.Dots}}<circle cx="{{.X}}" cy="{{.Y}}" r="4"><title>{{.Title}}</title></circle>{{end}}
+<text x="{{.Stats.Conf.FirstX}}" y="162" text-anchor="middle">{{dateDMY .Stats.Conf.First}}</text>
+{{if not .Stats.Conf.Single}}<text x="{{.Stats.Conf.LastX}}" y="162" text-anchor="middle">{{dateDMY .Stats.Conf.Last}}</text>{{end}}
+</svg>
+</div>
+{{end}}
+{{if .Stats.HasConst}}
+<div class="panel reveal">
+<div class="section-head"><h2>{{t "stats.const_title"}}</h2><span class="meta">{{tp "stats.streak" .Stats.Streak}}</span></div>
+<p class="empty-note">{{t "stats.const_note"}}</p>
+<svg viewBox="0 0 740 190" class="chart" role="img" aria-label="{{t "stats.const_title"}}">
+{{range .Stats.Const.Bars}}<rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="4" class="bar"/><text x="{{.CX}}" y="{{.CountY}}" text-anchor="middle" class="count">{{.Count}}</text><text x="{{.CX}}" y="172" text-anchor="middle">{{.Label}}</text>{{end}}
+</svg>
 </div>
 {{end}}
 </section>

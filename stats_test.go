@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -123,5 +124,119 @@ func TestDiaryStatsAndRender(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("diary page missing %q", want)
 		}
+	}
+}
+
+func TestCurrentStreak(t *testing.T) {
+	days := []dayTotal{
+		{Date: "2026-10-08", Minutes: 30},
+		{Date: "2026-10-09", Minutes: 45},
+		{Date: "2026-10-10", Minutes: 20},
+		{Date: "2026-10-06", Minutes: 0}, // zero day never counts
+	}
+	if got := currentStreak(days, "2026-10-10"); got != 3 {
+		t.Errorf("streak ending today = %d, want 3", got)
+	}
+	if got := currentStreak(days, "2026-10-11"); got != 3 {
+		t.Errorf("streak alive via yesterday = %d, want 3", got)
+	}
+	if got := currentStreak(days, "2026-10-12"); got != 0 {
+		t.Errorf("streak after a gap day = %d, want 0", got)
+	}
+}
+
+func TestWeekCountsFillGaps(t *testing.T) {
+	days := []dayTotal{
+		{Date: "2026-09-07", Minutes: 60},
+		{Date: "2026-09-09", Minutes: 60},
+		{Date: "2026-09-21", Minutes: 60},
+	}
+	counts := weekCounts(days)
+	if len(counts) != 3 {
+		t.Fatalf("counts = %d, want 3 (middle week filled)", len(counts))
+	}
+	if counts[0].Days != 2 || counts[1].Days != 0 || counts[2].Days != 1 {
+		t.Errorf("counts = %+v", counts)
+	}
+	if counts[1].Monday != "2026-09-14" {
+		t.Errorf("filled week monday = %s", counts[1].Monday)
+	}
+}
+
+func TestAggregateConfWeeks(t *testing.T) {
+	rows := []confSession{
+		{Date: "2026-09-07", Conf: 2},
+		{Date: "2026-09-08", Conf: 4},
+		{Date: "2026-09-08", Conf: 0}, // unrated: excluded
+		{Date: "2026-09-15", Conf: 5},
+	}
+	weeks := aggregateConfWeeks(rows)
+	if len(weeks) != 2 {
+		t.Fatalf("weeks = %d, want 2", len(weeks))
+	}
+	if math.Abs(weeks[0].Mean-3) > 1e-9 || math.Abs(weeks[1].Mean-5) > 1e-9 {
+		t.Errorf("weeks = %+v", weeks)
+	}
+}
+
+func TestDiaryStatsAuditionsCoverageConf(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := migrate(db); err != nil {
+		t.Fatalf("migrate failed: %v", err)
+	}
+	today, _ := time.Parse("2006-01-02", todayStr())
+	recent := today.AddDate(0, 0, -3).Format("2006-01-02")
+	old := today.AddDate(0, 0, -30).Format("2006-01-02")
+	stmts := []string{
+		`INSERT INTO auditions(id, name, audition_date, weight) VALUES(1, 'Futura', '2027-02-01', 3)`,
+		`INSERT INTO auditions(id, name, audition_date, weight) VALUES(2, 'Altra', '2027-03-01', 3)`,
+		`INSERT INTO auditions(id, name, audition_date, weight) VALUES(3, 'Passata', '2020-01-01', 3)`,
+		`INSERT INTO pieces(id, composer, work, kind, difficulty) VALUES(1, 'Alfa', 'Pezzo', 'excerpt', 3)`,
+		`INSERT INTO pieces(id, composer, work, kind, difficulty) VALUES(2, 'Beta', 'Pezzo', 'excerpt', 3)`,
+		`INSERT INTO piece_audition(piece_id, audition_id) VALUES(1, 1)`,
+		`INSERT INTO piece_audition(piece_id, audition_id) VALUES(1, 2)`,
+		`INSERT INTO piece_audition(piece_id, audition_id) VALUES(2, 1)`,
+		`INSERT INTO piece_audition(piece_id, audition_id) VALUES(1, 3)`,
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES(?, 1, 100, 4)`, recent); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES(?, 2, 50, 2)`, old); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{db: db}
+	stats, err := a.diaryStats("en")
+	if err != nil {
+		t.Fatalf("diaryStats: %v", err)
+	}
+	// Piece 1 counts toward all three auditions; piece 2 only Futura.
+	if len(stats.Auditions) != 3 {
+		t.Fatalf("audition rows = %d, want 3", len(stats.Auditions))
+	}
+	if stats.Auditions[0].Name != "Futura" || stats.Auditions[0].Val != "2:30h" || stats.Auditions[0].Pct != 100 {
+		t.Errorf("top audition row = %+v", stats.Auditions[0])
+	}
+	// Coverage lists only upcoming auditions: Futura 1/2 (piece 2 is
+	// stale), Altra 1/1; the concluded audition is absent.
+	if len(stats.Coverage) != 2 {
+		t.Fatalf("coverage rows = %d, want 2", len(stats.Coverage))
+	}
+	if stats.Coverage[0].Name != "Futura" || stats.Coverage[0].Val != "1/2 · 50%" {
+		t.Errorf("coverage row = %+v", stats.Coverage[0])
+	}
+	if stats.Coverage[1].Name != "Altra" || stats.Coverage[1].Val != "1/1 · 100%" {
+		t.Errorf("coverage row = %+v", stats.Coverage[1])
+	}
+	if !stats.HasConf || !stats.HasConst {
+		t.Errorf("conf/const missing: %v %v", stats.HasConf, stats.HasConst)
 	}
 }
