@@ -4,7 +4,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOARCH=arm64 go build -trimpath -o /out/praeludium . \
+RUN CGO_ENABLED=0 GOARCH=arm64 go build -trimpath -o /out/praeludium ./cmd/praeludium \
   && mkdir -p /out/data
 
 # ---- runtime ----
