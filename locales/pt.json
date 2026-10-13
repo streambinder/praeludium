@@ -60,6 +60,7 @@
   "err.link_missing": "falta a ligação de recurso",
   "err.name_date_required": "o nome e a data são obrigatórios",
   "err.piece_invalid": "peça inválida",
+  "err.recording_missing": "Nenhum áudio recebido.",
   "err.round_name_required": "O nome da fase é obrigatório.",
   "err.session_invalid": "dados de sessão inválidos",
   "err.time_invalid": "hora inválida",
@@ -164,6 +165,23 @@
   "prepmap.title": "Mapa de segurança",
   "readiness.note": "Segurança média das peças ligadas a cada audição.",
   "readiness.title": "Segurança por audição",
+  "rec.copy_link": "Copiar link",
+  "rec.delete": "Excluir",
+  "rec.discard": "Descartar",
+  "rec.empty": "Ainda não há gravações.",
+  "rec.mock": "Audição simulada",
+  "rec.record": "Gravar",
+  "rec.revoke": "Revogar link",
+  "rec.save": "Salvar gravação",
+  "rec.share": "Partilhar",
+  "rec.share_note": "Quem tiver o link pode ouvir. Revogue o link para fechar o acesso.",
+  "rec.stop": "Parar",
+  "rec.title": "Gravações",
+  "rec.total": {
+    "one": "%d gravação · %s",
+    "other": "%d gravações · %s"
+  },
+  "rec.unsupported": "A gravação não é suportada neste navegador.",
   "resources.count": {
     "one": "%d recurso",
     "other": "%d recursos"

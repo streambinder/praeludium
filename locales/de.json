@@ -60,6 +60,7 @@
   "err.link_missing": "Ressourcenlink fehlt",
   "err.name_date_required": "Name und Datum sind erforderlich",
   "err.piece_invalid": "ungültiges Stück",
+  "err.recording_missing": "Kein Audio empfangen.",
   "err.round_name_required": "Der Name der Runde ist erforderlich.",
   "err.session_invalid": "ungültige Einheitsdaten",
   "err.time_invalid": "ungültige Uhrzeit",
@@ -164,6 +165,23 @@
   "prepmap.title": "Sicherheitskarte",
   "readiness.note": "Durchschnittliche Sicherheit der mit jedem Probespiel verknüpften Stücke.",
   "readiness.title": "Sicherheit je Probespiel",
+  "rec.copy_link": "Link kopieren",
+  "rec.delete": "Löschen",
+  "rec.discard": "Verwerfen",
+  "rec.empty": "Noch keine Aufnahmen.",
+  "rec.mock": "Simuliertes Probespiel",
+  "rec.record": "Aufnehmen",
+  "rec.revoke": "Link widerrufen",
+  "rec.save": "Aufnahme speichern",
+  "rec.share": "Teilen",
+  "rec.share_note": "Jeder mit dem Link kann zuhören. Widerrufen Sie den Link, um den Zugang zu schließen.",
+  "rec.stop": "Stopp",
+  "rec.title": "Aufnahmen",
+  "rec.total": {
+    "one": "%d Aufnahme · %s",
+    "other": "%d Aufnahmen · %s"
+  },
+  "rec.unsupported": "Aufnahme wird in diesem Browser nicht unterstützt.",
   "resources.count": {
     "one": "%d Ressource",
     "other": "%d Ressourcen"

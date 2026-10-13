@@ -140,6 +140,18 @@ func migrate(db *sql.DB) error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS recordings(
+			id INTEGER PRIMARY KEY,
+			piece_id INTEGER NOT NULL REFERENCES pieces(id) ON DELETE CASCADE,
+			mock_item_id INTEGER,
+			taken_on TEXT NOT NULL,
+			filename TEXT NOT NULL,
+			duration_sec INTEGER NOT NULL DEFAULT 0,
+			size_bytes INTEGER NOT NULL DEFAULT 0,
+			share_token TEXT,
+			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_recordings_share_token ON recordings(share_token) WHERE share_token IS NOT NULL`,
 		`CREATE TABLE IF NOT EXISTS audition_rounds(
 			id INTEGER PRIMARY KEY,
 			audition_id INTEGER NOT NULL REFERENCES auditions(id) ON DELETE CASCADE,

@@ -52,6 +52,7 @@
 <p class="meta">{{t "settings.language_current" .LangName}}</p>
 <button type="submit">{{t "common.save"}}</button>
 </form>
+{{if .RecInfo}}<p class="meta">{{.RecInfo}}</p>{{end}}
 <p class="meta">{{t "settings.geoip_credit"}}</p>
 </section>
 

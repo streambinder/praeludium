@@ -1810,3 +1810,51 @@ a:hover {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* Recordings. */
+.hidden {
+  display: none;
+}
+
+.recorder {
+  margin-top: 0.4rem;
+}
+
+.rec-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.recorder audio,
+.rec-item audio {
+  width: 100%;
+  margin-top: 0.4rem;
+}
+
+.rec-list {
+  margin-top: 0.6rem;
+}
+
+.rec-item {
+  border-top: 1px solid var(--line);
+  padding: 0.7rem 0;
+}
+
+.rec-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.rec-head {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  margin-left: auto;
+}
+
+.share-note code {
+  word-break: break-all;
+}

@@ -60,6 +60,7 @@
   "err.link_missing": "missing resource link",
   "err.name_date_required": "name and date are required",
   "err.piece_invalid": "invalid piece",
+  "err.recording_missing": "No audio was received.",
   "err.round_name_required": "A round name is required.",
   "err.session_invalid": "invalid session data",
   "err.time_invalid": "invalid time",
@@ -164,6 +165,23 @@
   "prepmap.title": "Confidence map",
   "readiness.note": "Average confidence of the pieces linked to each audition.",
   "readiness.title": "Confidence by audition",
+  "rec.copy_link": "Copy link",
+  "rec.delete": "Delete",
+  "rec.discard": "Discard",
+  "rec.empty": "No recordings yet.",
+  "rec.mock": "Mock audition",
+  "rec.record": "Record",
+  "rec.revoke": "Revoke link",
+  "rec.save": "Save recording",
+  "rec.share": "Share",
+  "rec.share_note": "Anyone with the link can listen. Revoke the link to close access.",
+  "rec.stop": "Stop",
+  "rec.title": "Recordings",
+  "rec.total": {
+    "one": "%d recording · %s",
+    "other": "%d recordings · %s"
+  },
+  "rec.unsupported": "Recording is not supported in this browser.",
   "resources.count": {
     "one": "%d resource",
     "other": "%d resources"

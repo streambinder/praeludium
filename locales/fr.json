@@ -60,6 +60,7 @@
   "err.link_missing": "lien de ressource manquant",
   "err.name_date_required": "le nom et la date sont obligatoires",
   "err.piece_invalid": "morceau non valide",
+  "err.recording_missing": "Aucun audio reçu.",
   "err.round_name_required": "Le nom du tour est obligatoire.",
   "err.session_invalid": "données de séance non valides",
   "err.time_invalid": "heure non valide",
@@ -164,6 +165,23 @@
   "prepmap.title": "Carte de confiance",
   "readiness.note": "Confiance moyenne des morceaux liés à chaque audition.",
   "readiness.title": "Confiance par audition",
+  "rec.copy_link": "Copier le lien",
+  "rec.delete": "Supprimer",
+  "rec.discard": "Jeter",
+  "rec.empty": "Aucun enregistrement pour le moment.",
+  "rec.mock": "Audition simulée",
+  "rec.record": "Enregistrer",
+  "rec.revoke": "Révoquer le lien",
+  "rec.save": "Sauvegarder la prise",
+  "rec.share": "Partager",
+  "rec.share_note": "Toute personne avec le lien peut écouter. Révoquez le lien pour fermer l'accès.",
+  "rec.stop": "Arrêter",
+  "rec.title": "Enregistrements",
+  "rec.total": {
+    "one": "%d enregistrement · %s",
+    "other": "%d enregistrements · %s"
+  },
+  "rec.unsupported": "L'enregistrement n'est pas pris en charge par ce navigateur.",
   "resources.count": {
     "one": "%d ressource",
     "other": "%d ressources"

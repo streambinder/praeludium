@@ -13,7 +13,8 @@ import (
 )
 
 type App struct {
-	db *sql.DB
+	db      *sql.DB
+	dataDir string
 }
 
 func (a *App) routes(mux *http.ServeMux) {
@@ -47,6 +48,13 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /settings", a.handleSettings)
 	mux.HandleFunc("POST /settings", a.handleSaveSettings)
 	mux.HandleFunc("POST /settings/language", a.handleSetLanguage)
+	mux.HandleFunc("POST /pieces/{id}/recordings", a.handleUploadRecording)
+	mux.HandleFunc("GET /recordings/{id}/audio", a.handleRecordingAudio)
+	mux.HandleFunc("POST /recordings/{id}/delete", a.handleDeleteRecording)
+	mux.HandleFunc("POST /recordings/{id}/share", a.handleShareRecording)
+	mux.HandleFunc("POST /recordings/{id}/share/revoke", a.handleRevokeShare)
+	mux.HandleFunc("GET /share/{token}", a.handleSharedPage)
+	mux.HandleFunc("GET /share/{token}/audio", a.handleSharedAudio)
 	registerLegacyRedirects(mux)
 }
 
@@ -2047,12 +2055,14 @@ func (a *App) handleDiaryDay(w http.ResponseWriter, r *http.Request) {
 }
 
 type pieceDetailData struct {
-	Title    string
-	Nav      string
-	Piece    Piece
-	Sessions []Session
-	Spark    sparkline
-	Score    pezzoScore
+	Title        string
+	Nav          string
+	Piece        Piece
+	Sessions     []Session
+	Spark        sparkline
+	Score        pezzoScore
+	Recordings   []recordingRow
+	RecorderDate string
 }
 
 // pezzoScore is the piece's standing in today's plan scoring, shown on
@@ -2220,8 +2230,18 @@ func (a *App) handlePieceDetail(w http.ResponseWriter, r *http.Request) {
 			score.ForecastDate, score.ForecastScore, score.ForecastWhy = fDate, fScore, fWhy
 		}
 	}
+	recs, err := a.pieceRecordings(p.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	recorderDate := r.URL.Query().Get("date")
+	if _, err := time.Parse("2006-01-02", recorderDate); err != nil {
+		recorderDate = todayStr()
+	}
 	a.render(w, r, "piece_detail.html", pieceDetailData{
 		Title: p.Composer + " — " + p.Work, Nav: "pieces", Piece: p, Sessions: sessions, Spark: buildSparkline(cps), Score: score,
+		Recordings: recordingRows(recs), RecorderDate: recorderDate,
 	})
 }
 
@@ -2234,6 +2254,7 @@ type settingsData struct {
 	Auditions  []Audition
 	LangChoice string
 	LangName   string
+	RecInfo    string
 }
 
 func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -2246,9 +2267,13 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	recInfo := ""
+	if count, size, err := a.recordingsUsage(); err == nil && count > 0 {
+		recInfo = trPlural(langFor(r), "rec.total", count, humanBytes(langFor(r), size))
+	}
 	a.render(w, r, "settings.html", settingsData{
 		Title: tr(langFor(r), "nav.settings"), Nav: "settings", Coeffs: coeffs, Auditions: auditions,
-		LangChoice: langChoice(r), LangName: langNames[langFor(r)],
+		LangChoice: langChoice(r), LangName: langNames[langFor(r)], RecInfo: recInfo,
 	})
 }
 

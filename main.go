@@ -62,7 +62,7 @@ func run(cfg Config) error {
 			log.Printf("db close: %v", err)
 		}
 	}()
-	app := &App{db: db}
+	app := &App{db: db, dataDir: cfg.DataDir}
 	inner := http.NewServeMux()
 	app.routes(inner)
 	outer := http.NewServeMux()
