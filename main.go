@@ -1,4 +1,4 @@
-// Command studium is a daily practice diary for a cellist preparing for
+// Command praeludium is a daily practice diary for a cellist preparing for
 // orchestra auditions: it ranks pieces every day with an explainable score,
 // tracks practice time and confidence, and keeps a diary.
 package main
@@ -20,7 +20,7 @@ type Config struct {
 
 func loadConfig() Config {
 	cfg := Config{
-		DataDir: os.Getenv("STUDIUM_DATA_DIR"),
+		DataDir: os.Getenv("PRAELUDIUM_DATA_DIR"),
 		Port:    os.Getenv("PORT"),
 	}
 	if cfg.DataDir == "" {
@@ -53,7 +53,7 @@ func run(cfg Config) error {
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return fmt.Errorf("data dir: %w", err)
 	}
-	db, err := openDB(filepath.Join(cfg.DataDir, "studium.db"))
+	db, err := openDB(filepath.Join(cfg.DataDir, "praeludium.db"))
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
 	}
@@ -71,7 +71,7 @@ func run(cfg Config) error {
 			log.Printf("healthz: %v", err)
 		}
 	})
-	// Authentication is enforced by the reverse proxy in front of studium:
+	// Authentication is enforced by the reverse proxy in front of praeludium:
 	// the app itself serves everything, including /healthz, without auth.
 	outer.Handle("/", inner)
 	srv := &http.Server{
@@ -81,7 +81,7 @@ func run(cfg Config) error {
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-	log.Printf("studium in ascolto su :%s (dati in %s)", cfg.Port, cfg.DataDir)
+	log.Printf("praeludium in ascolto su :%s (dati in %s)", cfg.Port, cfg.DataDir)
 	return srv.ListenAndServe()
 }
 

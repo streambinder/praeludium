@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.Title}} · studium</title>
+<title>{{.Title}} · præludium</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,7 +13,7 @@
 <body>
 <header class="site-header">
 <div class="header-inner">
-<a class="brand" href="/"><span class="brand-mark">S</span><span class="brand-name">studium</span></a>
+<a class="brand" href="/"><span class="brand-mark">P</span><span class="brand-name">præludium</span></a>
 <nav>
 <a href="/" class="{{if eq .Nav "today"}}active{{end}}">{{t "nav.today"}}</a>
 <a href="/pieces" class="{{if eq .Nav "pieces"}}active{{end}}">{{t "nav.pieces"}}</a>
@@ -26,7 +26,7 @@
 <main>
 {{template "content" .}}
 </main>
-<footer class="site-footer"><span>studium · {{t "app.tagline"}}</span></footer>
+<footer class="site-footer"><span>præludium · {{t "app.tagline"}}</span></footer>
 <script>
 (function() {
   var io = new IntersectionObserver(function(entries) {

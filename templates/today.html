@@ -228,7 +228,7 @@ var L = { neverTouched: {{t "js.never_touched"}}, saved: {{t "js.saved"}}, error
     var state = { acc: 0, since: 0 };
     function load() {
       var p = pieceId();
-      key = p ? 'studium-timer-' + el.dataset.day + '-' + p : null;
+      key = p ? 'praeludium-timer-' + el.dataset.day + '-' + p : null;
       state = { acc: 0, since: 0 };
       if (!key) return;
       try {

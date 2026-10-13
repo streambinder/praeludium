@@ -68,6 +68,6 @@ jobs:
           context: .
           platforms: linux/arm64
           push: true
-          tags: ghcr.io/streambinder/studium:latest
+          tags: ghcr.io/streambinder/praeludium:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
