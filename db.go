@@ -11,14 +11,16 @@ import (
 )
 
 type Audition struct {
-	ID       int64
-	Name     string
-	Date     string // YYYY-MM-DD
-	Weight   int
-	Archived bool
-	Excerpt  string  // per-link excerpt, set only when read through piece_audition
-	Level    int     // mean preparation level 0..4 of its pieces, stamped on demand
-	Prep     float64 // mean preparation score 0..1 of its pieces, stamped on demand
+	ID        int64
+	Name      string
+	Date      string // YYYY-MM-DD
+	Weight    int
+	Archived  bool
+	Excerpt   string        // per-link excerpt, set only when read through piece_audition
+	RoundID   sql.NullInt64 // per-link round, set only when read through piece_audition
+	RoundName string        // per-link round name, set only when read through piece_audition
+	Level     int           // mean preparation level 0..4 of its pieces, stamped on demand
+	Prep      float64       // mean preparation score 0..1 of its pieces, stamped on demand
 }
 
 // Piece kinds.
@@ -32,8 +34,9 @@ type Piece struct {
 	Composer   string
 	Work       string
 	Movement   string
-	Kind       string // 'excerpt' | 'solo'
-	Difficulty int    // 1..5, user-calibrated; drives the prep-map tile size
+	Kind       string        // 'excerpt' | 'solo'
+	Difficulty int           // 1..5, user-calibrated; drives the prep-map tile size
+	TargetBPM  sql.NullInt64 // optional target tempo; NULL means no tempo signal
 	Archived   bool
 	Auditions  []Audition
 	HasActive  bool    // at least one non-archived audition with date >= today
@@ -137,6 +140,12 @@ func migrate(db *sql.DB) error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS audition_rounds(
+			id INTEGER PRIMARY KEY,
+			audition_id INTEGER NOT NULL REFERENCES auditions(id) ON DELETE CASCADE,
+			position INTEGER NOT NULL DEFAULT 1,
+			name TEXT NOT NULL DEFAULT ''
+		)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
@@ -161,6 +170,20 @@ func migrate(db *sql.DB) error {
 	// column started out as notes and is renamed when present.
 	if err := ensureLinkExcerpt(db); err != nil {
 		return err
+	}
+	// piece_audition.round_id names the round a linked piece belongs
+	// to; NULL means the piece is asked in every round.
+	if _, err := db.Exec(`ALTER TABLE piece_audition ADD COLUMN round_id INTEGER REFERENCES audition_rounds(id) ON DELETE SET NULL`); err != nil {
+		if !isDupColumnErr(err) {
+			return fmt.Errorf("migrate round_id: %w", err)
+		}
+	}
+	// pieces.target_bpm is the optional target tempo of a piece; NULL
+	// means the piece carries no tempo signal.
+	if _, err := db.Exec(`ALTER TABLE pieces ADD COLUMN target_bpm INTEGER`); err != nil {
+		if !isDupColumnErr(err) {
+			return fmt.Errorf("migrate target_bpm: %w", err)
+		}
 	}
 	// sessions.bpm holds the optional metronome mark of a practice
 	// session; NULL when the player did not record one.
@@ -334,16 +357,41 @@ func (a *App) listAuditions(includeArchived bool) ([]Audition, error) {
 }
 
 func (a *App) pieceConcorsi(pieceID int64) ([]Audition, error) {
-	rows, err := a.db.Query(`SELECT c.id, c.name, c.audition_date, c.weight, c.archived_at IS NOT NULL, pc.excerpt
+	rows, err := a.db.Query(`SELECT c.id, c.name, c.audition_date, c.weight, c.archived_at IS NOT NULL, pc.excerpt,
+		pc.round_id, COALESCE(rd.name, '')
 		FROM auditions c JOIN piece_audition pc ON pc.audition_id=c.id
+		LEFT JOIN audition_rounds rd ON rd.id = pc.round_id
 		WHERE pc.piece_id=? ORDER BY c.audition_date`, pieceID)
 	if err != nil {
 		return nil, err
 	}
 	return collect(rows, func(rows *sql.Rows) (Audition, error) {
 		var c Audition
-		err := rows.Scan(&c.ID, &c.Name, &c.Date, &c.Weight, &c.Archived, &c.Excerpt)
+		err := rows.Scan(&c.ID, &c.Name, &c.Date, &c.Weight, &c.Archived, &c.Excerpt, &c.RoundID, &c.RoundName)
 		return c, err
+	})
+}
+
+// Round is one round of an audition (preliminary, semifinal, final).
+// A piece link may name a round; no round means the piece is asked in
+// every round.
+type Round struct {
+	ID         int64
+	AuditionID int64
+	Position   int
+	Name       string
+}
+
+func (a *App) auditionRounds(auditionID int64) ([]Round, error) {
+	rows, err := a.db.Query(`SELECT id, audition_id, position, name FROM audition_rounds
+		WHERE audition_id=? ORDER BY position, id`, auditionID)
+	if err != nil {
+		return nil, err
+	}
+	return collect(rows, func(rows *sql.Rows) (Round, error) {
+		var rd Round
+		err := rows.Scan(&rd.ID, &rd.AuditionID, &rd.Position, &rd.Name)
+		return rd, err
 	})
 }
 
@@ -418,7 +466,7 @@ func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error
 func scanPieces(rows *sql.Rows) ([]Piece, error) {
 	return collect(rows, func(rows *sql.Rows) (Piece, error) {
 		var p Piece
-		err := rows.Scan(&p.ID, &p.Composer, &p.Work, &p.Movement, &p.Kind, &p.Difficulty, &p.Archived)
+		err := rows.Scan(&p.ID, &p.Composer, &p.Work, &p.Movement, &p.Kind, &p.Difficulty, &p.Archived, &p.TargetBPM)
 		return p, err
 	})
 }
@@ -428,7 +476,7 @@ func scanPieces(rows *sql.Rows) ([]Piece, error) {
 // movement, kind) plus its auditions names and excerpts.
 func (a *App) listPieces(auditionID int64, kind string, includeArchived bool, query string) ([]Piece, error) {
 	q := `SELECT DISTINCT p.id, p.composer, p.work, p.movement, p.kind, p.difficulty,
-		p.archived_at IS NOT NULL FROM pieces p`
+		p.archived_at IS NOT NULL, p.target_bpm FROM pieces p`
 	args := []any{}
 	where := ""
 	if auditionID > 0 {
@@ -478,8 +526,8 @@ func (a *App) listPieces(auditionID int64, kind string, includeArchived bool, qu
 
 func (a *App) getPiece(id int64) (Piece, error) {
 	var p Piece
-	err := a.db.QueryRow(`SELECT id, composer, work, movement, kind, difficulty, archived_at IS NOT NULL
-		FROM pieces WHERE id=?`, id).Scan(&p.ID, &p.Composer, &p.Work, &p.Movement, &p.Kind, &p.Difficulty, &p.Archived)
+	err := a.db.QueryRow(`SELECT id, composer, work, movement, kind, difficulty, archived_at IS NOT NULL, target_bpm
+		FROM pieces WHERE id=?`, id).Scan(&p.ID, &p.Composer, &p.Work, &p.Movement, &p.Kind, &p.Difficulty, &p.Archived, &p.TargetBPM)
 	if err != nil {
 		return p, err
 	}

@@ -60,6 +60,7 @@
   "err.link_missing": "lien de ressource manquant",
   "err.name_date_required": "le nom et la date sont obligatoires",
   "err.piece_invalid": "morceau non valide",
+  "err.round_name_required": "Le nom du tour est obligatoire.",
   "err.session_invalid": "données de séance non valides",
   "err.time_invalid": "heure non valide",
   "field.composer": "Compositeur",
@@ -83,6 +84,7 @@
   "field.other_link": "Autre lien",
   "field.priority": "Priorité",
   "field.security": "Confiance",
+  "field.target_bpm": "Tempo cible (BPM)",
   "field.work": "Œuvre",
   "filter.all": "tous",
   "forecast.reason_after": "dès le lendemain de l'audition %s, ses morceaux quittent la tête du classement",
@@ -166,6 +168,12 @@
     "one": "%d ressource",
     "other": "%d ressources"
   },
+  "rounds.add": "Ajouter un tour",
+  "rounds.all": "Tous les tours",
+  "rounds.empty": "Aucun tour.",
+  "rounds.name_ph": "Nom du tour, ex. Éliminatoire",
+  "rounds.note": "Attribuez un morceau à un tour depuis le formulaire du morceau. Sans tour, il vaut pour tous.",
+  "rounds.title": "Tours",
   "score.auditions_count": {
     "one": "dans %d audition :",
     "other": "dans %d auditions :"

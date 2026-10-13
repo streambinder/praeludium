@@ -37,6 +37,8 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /auditions/{id}", a.handleUpdateAudition)
 	mux.HandleFunc("POST /auditions/{id}/links", a.handleAddAuditionLink)
 	mux.HandleFunc("POST /auditions/{id}/links/{linkID}/delete", a.handleDeleteAuditionLink)
+	mux.HandleFunc("POST /auditions/{id}/rounds", a.handleAddRound)
+	mux.HandleFunc("POST /auditions/{id}/rounds/{roundID}/delete", a.handleDeleteRound)
 	mux.HandleFunc("POST /auditions/{id}/archive", a.handleArchiveAudition)
 	mux.HandleFunc("POST /auditions/{id}/restore", a.handleRestoreAudition)
 	mux.HandleFunc("GET /diary", a.handleDiary)
@@ -1156,6 +1158,38 @@ func linkExcerpt(r *http.Request, auditionID int64) string {
 	return strings.TrimSpace(r.FormValue("excerpt-" + strconv.FormatInt(auditionID, 10)))
 }
 
+// linkRound reads the round chosen for one audition in the piece form.
+// A round that does not belong to the audition reads as no round.
+func (a *App) linkRound(r *http.Request, auditionID int64) sql.NullInt64 {
+	raw := strings.TrimSpace(r.FormValue("round-" + strconv.FormatInt(auditionID, 10)))
+	if raw == "" {
+		return sql.NullInt64{}
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return sql.NullInt64{}
+	}
+	var owner int64
+	if err := a.db.QueryRow(`SELECT audition_id FROM audition_rounds WHERE id=?`, id).Scan(&owner); err != nil || owner != auditionID {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: id, Valid: true}
+}
+
+// formTargetBPM reads the optional target tempo of a piece; empty or
+// invalid input means no target.
+func formTargetBPM(r *http.Request) sql.NullInt64 {
+	raw := strings.TrimSpace(r.FormValue("target_bpm"))
+	if raw == "" {
+		return sql.NullInt64{}
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 20 || n > 400 {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(n), Valid: true}
+}
+
 func (a *App) handleAddPiece(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1171,8 +1205,8 @@ func (a *App) handleAddPiece(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, tr(langFor(r), "err.composer_work_required"), http.StatusBadRequest)
 		return
 	}
-	res, err := a.db.Exec(`INSERT INTO pieces(composer, work, movement, kind, difficulty)
-		VALUES(?,?,?,?,?)`, composer, work, r.FormValue("movement"), kind, clampDifficulty(r))
+	res, err := a.db.Exec(`INSERT INTO pieces(composer, work, movement, kind, difficulty, target_bpm)
+		VALUES(?,?,?,?,?,?)`, composer, work, r.FormValue("movement"), kind, clampDifficulty(r), formTargetBPM(r))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1183,7 +1217,7 @@ func (a *App) handleAddPiece(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, cid := range formIDs(r, "audition") {
-		if _, err := a.db.Exec(`INSERT OR IGNORE INTO piece_audition(piece_id, audition_id, excerpt) VALUES(?,?,?)`, pid, cid, linkExcerpt(r, cid)); err != nil {
+		if _, err := a.db.Exec(`INSERT OR IGNORE INTO piece_audition(piece_id, audition_id, excerpt, round_id) VALUES(?,?,?,?)`, pid, cid, linkExcerpt(r, cid), a.linkRound(r, cid)); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -1199,6 +1233,8 @@ type pieceFormData struct {
 	Auditions []Audition
 	Selected  map[int64]bool
 	Excerpt   map[int64]string
+	Rounds    map[int64][]Round
+	SelRound  map[int64]int64
 }
 
 func (a *App) handleEditPiece(w http.ResponseWriter, r *http.Request) {
@@ -1212,12 +1248,28 @@ func (a *App) handleEditPiece(w http.ResponseWriter, r *http.Request) {
 	}
 	sel := map[int64]bool{}
 	excerpts := map[int64]string{}
+	selRound := map[int64]int64{}
 	for _, c := range p.Auditions {
 		sel[c.ID] = true
 		excerpts[c.ID] = c.Excerpt
+		if c.RoundID.Valid {
+			selRound[c.ID] = c.RoundID.Int64
+		}
+	}
+	rounds := map[int64][]Round{}
+	for _, c := range auditions {
+		rds, err := a.auditionRounds(c.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if len(rds) > 0 {
+			rounds[c.ID] = rds
+		}
 	}
 	a.render(w, r, "piece_form.html", pieceFormData{
-		Title: tr(langFor(r), "piece.edit_title"), Nav: "pieces", Piece: p, Auditions: auditions, Selected: sel, Excerpt: excerpts,
+		Title: tr(langFor(r), "piece.edit_title"), Nav: "pieces", Piece: p, Auditions: auditions,
+		Selected: sel, Excerpt: excerpts, Rounds: rounds, SelRound: selRound,
 	})
 }
 
@@ -1275,12 +1327,20 @@ func (a *App) handleUpdatePiece(w http.ResponseWriter, r *http.Request) {
 	if kind != kindSolo {
 		kind = kindExcerpt
 	}
-	_, err := a.db.Exec(`UPDATE pieces SET composer=?, work=?, movement=?, kind=?, difficulty=?
+	_, err := a.db.Exec(`UPDATE pieces SET composer=?, work=?, movement=?, kind=?, difficulty=?, target_bpm=?
 		WHERE id=?`, r.FormValue("composer"), r.FormValue("work"),
-		r.FormValue("movement"), kind, clampDifficulty(r), id)
+		r.FormValue("movement"), kind, clampDifficulty(r), formTargetBPM(r), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	// Rounds are validated before the transaction starts: the pool
+	// has a single connection, so querying a.db inside the tx would
+	// deadlock.
+	auditionIDs := formIDs(r, "audition")
+	linkRounds := map[int64]sql.NullInt64{}
+	for _, cid := range auditionIDs {
+		linkRounds[cid] = a.linkRound(r, cid)
 	}
 	tx, err := a.db.Begin()
 	if err != nil {
@@ -1296,8 +1356,8 @@ func (a *App) handleUpdatePiece(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	for _, cid := range formIDs(r, "audition") {
-		if _, err := tx.Exec(`INSERT INTO piece_audition(piece_id, audition_id, excerpt) VALUES(?,?,?)`, id, cid, linkExcerpt(r, cid)); err != nil {
+	for _, cid := range auditionIDs {
+		if _, err := tx.Exec(`INSERT INTO piece_audition(piece_id, audition_id, excerpt, round_id) VALUES(?,?,?,?)`, id, cid, linkExcerpt(r, cid), linkRounds[cid]); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -1590,6 +1650,7 @@ type auditionFormData struct {
 	Nav      string
 	Audition Audition
 	Links    []AuditionLink
+	Rounds   []Round
 }
 
 // handleAuditionEdit renders the audition edit panel (fields + resource
@@ -1604,9 +1665,55 @@ func (a *App) handleAuditionEdit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	rounds, err := a.auditionRounds(c.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	a.render(w, r, "audition_form.html", auditionFormData{
-		Title: tr(langFor(r), "audition.edit_title"), Nav: "auditions", Audition: c, Links: links,
+		Title: tr(langFor(r), "audition.edit_title"), Nav: "auditions", Audition: c, Links: links, Rounds: rounds,
 	})
+}
+
+func (a *App) handleAddRound(w http.ResponseWriter, r *http.Request) {
+	c, ok := a.concorsoOr404(w, r)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSpace(r.FormValue("round_name"))
+	if name == "" {
+		http.Error(w, tr(langFor(r), "err.round_name_required"), http.StatusBadRequest)
+		return
+	}
+	if _, err := a.db.Exec(`INSERT INTO audition_rounds(audition_id, position, name)
+		VALUES(?, (SELECT COALESCE(MAX(position), 0) + 1 FROM audition_rounds WHERE audition_id=?), ?)`, c.ID, c.ID, name); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("event round added audition=%d name=%q", c.ID, name)
+	http.Redirect(w, r, "/auditions/"+strconv.FormatInt(c.ID, 10)+"/edit", http.StatusSeeOther)
+}
+
+func (a *App) handleDeleteRound(w http.ResponseWriter, r *http.Request) {
+	c, ok := a.concorsoOr404(w, r)
+	if !ok {
+		return
+	}
+	roundID, err := strconv.ParseInt(r.PathValue("roundID"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := a.db.Exec(`DELETE FROM audition_rounds WHERE id=? AND audition_id=?`, roundID, c.ID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("event round deleted audition=%d round=%d", c.ID, roundID)
+	http.Redirect(w, r, "/auditions/"+strconv.FormatInt(c.ID, 10)+"/edit", http.StatusSeeOther)
 }
 
 func (a *App) handleAddAuditionLink(w http.ResponseWriter, r *http.Request) {

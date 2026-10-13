@@ -60,6 +60,7 @@
   "err.link_missing": "Ressourcenlink fehlt",
   "err.name_date_required": "Name und Datum sind erforderlich",
   "err.piece_invalid": "ungültiges Stück",
+  "err.round_name_required": "Der Name der Runde ist erforderlich.",
   "err.session_invalid": "ungültige Einheitsdaten",
   "err.time_invalid": "ungültige Uhrzeit",
   "field.composer": "Komponist",
@@ -83,6 +84,7 @@
   "field.other_link": "Weiterer Link",
   "field.priority": "Priorität",
   "field.security": "Sicherheit",
+  "field.target_bpm": "Zieltempo (BPM)",
   "field.work": "Werk",
   "filter.all": "alle",
   "forecast.reason_after": "ab dem Tag nach dem Probespiel %s verlassen seine Stücke die Spitze der Rangliste",
@@ -166,6 +168,12 @@
     "one": "%d Ressource",
     "other": "%d Ressourcen"
   },
+  "rounds.add": "Runde hinzufügen",
+  "rounds.all": "Alle Runden",
+  "rounds.empty": "Keine Runden.",
+  "rounds.name_ph": "Name der Runde, z. B. Vorrunde",
+  "rounds.note": "Ordnen Sie ein Stück im Stückformular einer Runde zu. Ohne Runde gilt es für alle.",
+  "rounds.title": "Runden",
   "score.auditions_count": {
     "one": "in %d Probespiel:",
     "other": "in %d Probespielen:"

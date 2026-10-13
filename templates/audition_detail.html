@@ -56,7 +56,7 @@
 <article class="card reveal">
 <span class="prep-pin pin-corner" tabindex="0" aria-label="{{t "prep.label" (pct .Prep)}}"><span class="prep-dot lv{{.Level}}"></span><span class="pin-tip" aria-hidden="true">{{t "prep.label" (pct .Prep)}}</span></span>
 <div class="card-head"><strong><a class="card-link" href="/diary/piece/{{.ID}}">{{.Composer}} — {{.Work}}</a></strong></div>
-<div class="meta movement-row"><span class="badge kind">{{kindLabel .Kind}}</span>{{if .Movement}}<span>{{.Movement}}</span>{{end}}</div>
+<div class="meta movement-row"><span class="badge kind">{{kindLabel .Kind}}</span>{{if .Movement}}<span>{{.Movement}}</span>{{end}}{{$rn := ""}}{{range .Auditions}}{{if eq .ID $.Audition.ID}}{{$rn = .RoundName}}{{end}}{{end}}{{if $rn}}<span class="badge">{{$rn}}</span>{{end}}</div>
 {{$e := ""}}{{range .Auditions}}{{if eq .ID $.Audition.ID}}{{$e = .Excerpt}}{{end}}{{end}}{{if $e}}<div class="meta">{{$e}}</div>{{end}}
 </article>
 {{else}}<p class="empty">{{t "detail.no_pieces"}}</p>{{end}}

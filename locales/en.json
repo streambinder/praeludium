@@ -60,6 +60,7 @@
   "err.link_missing": "missing resource link",
   "err.name_date_required": "name and date are required",
   "err.piece_invalid": "invalid piece",
+  "err.round_name_required": "A round name is required.",
   "err.session_invalid": "invalid session data",
   "err.time_invalid": "invalid time",
   "field.composer": "Composer",
@@ -83,6 +84,7 @@
   "field.other_link": "Another link",
   "field.priority": "Priority",
   "field.security": "Confidence",
+  "field.target_bpm": "Target tempo (BPM)",
   "field.work": "Work",
   "filter.all": "all",
   "forecast.reason_after": "from the day after the %s audition, its pieces leave the top of the ranking",
@@ -166,6 +168,12 @@
     "one": "%d resource",
     "other": "%d resources"
   },
+  "rounds.add": "Add round",
+  "rounds.all": "All rounds",
+  "rounds.empty": "No rounds.",
+  "rounds.name_ph": "Round name, e.g. Preliminary",
+  "rounds.note": "Assign a piece to a round from the piece edit form. No round means every round.",
+  "rounds.title": "Rounds",
   "score.auditions_count": {
     "one": "in %d audition:",
     "other": "in %d auditions:"

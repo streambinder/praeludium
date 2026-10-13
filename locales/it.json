@@ -60,6 +60,7 @@
   "err.link_missing": "link risorsa mancante",
   "err.name_date_required": "nome e data sono obbligatori",
   "err.piece_invalid": "pezzo non valido",
+  "err.round_name_required": "Il nome del turno è obbligatorio.",
   "err.session_invalid": "dati seduta non validi",
   "err.time_invalid": "orario non valido",
   "field.composer": "Compositore",
@@ -83,6 +84,7 @@
   "field.other_link": "Altro link",
   "field.priority": "Priorità",
   "field.security": "Sicurezza",
+  "field.target_bpm": "Tempo obiettivo (BPM)",
   "field.work": "Opera",
   "filter.all": "tutti",
   "forecast.reason_after": "dal giorno dopo la prova di %s i suoi pezzi lasciano la testa della classifica",
@@ -166,6 +168,12 @@
     "one": "%d risorsa",
     "other": "%d risorse"
   },
+  "rounds.add": "Aggiungi turno",
+  "rounds.all": "Tutti i turni",
+  "rounds.empty": "Nessun turno.",
+  "rounds.name_ph": "Nome del turno, es. Eliminatoria",
+  "rounds.note": "Assegna un pezzo a un turno dal modulo di modifica del pezzo. Senza turno vale per tutti.",
+  "rounds.title": "Turni",
   "score.auditions_count": {
     "one": "in %d concorso:",
     "other": "in %d concorsi:"

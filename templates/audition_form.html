@@ -38,5 +38,26 @@
 <div class="row btns"><button type="submit">{{t "form.add_link"}}</button></div>
 </form>
 </section>
+<section>
+<div class="section-head"><h2>{{t "rounds.title"}}</h2></div>
+<p class="empty-note">{{t "rounds.note"}}</p>
+{{if .Rounds}}
+<div class="stack">
+{{range .Rounds}}
+<article class="card reveal">
+<div class="card-head"><strong>{{.Name}}</strong>
+<form method="post" action="/auditions/{{$.Audition.ID}}/rounds/{{.ID}}/delete" class="inline"><button class="secondary" type="submit">{{t "common.remove"}}</button></form>
+</div>
+</article>
+{{end}}
+</div>
+{{else}}<p class="empty">{{t "rounds.empty"}}</p>{{end}}
+<form method="post" action="/auditions/{{.Audition.ID}}/rounds" class="panel reveal">
+<div class="row">
+<label>{{t "field.name"}} <input type="text" name="round_name" required placeholder="{{t "rounds.name_ph"}}"></label>
+</div>
+<div class="row btns"><button type="submit">{{t "rounds.add"}}</button></div>
+</form>
+</section>
 <p><a href="/auditions/{{.Audition.ID}}">&larr; {{t "detail.back_to"}}</a></p>
 {{end}}
