@@ -119,3 +119,40 @@ func TestPezzoDetailChipShowsRound(t *testing.T) {
 		t.Fatalf("chip-round spans = %d, want 1 (only the rounded link)", n)
 	}
 }
+
+// The sparkline point tooltip formats the confidence as an integer:
+// the catalog verb must match the int argument or the title renders
+// a Go format error string.
+func TestPezzoDetailSparkTooltip(t *testing.T) {
+	db, err := openDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	past := time.Now().AddDate(0, 0, -3).Format("2006-01-02")
+	stmts := []string{
+		`INSERT INTO pieces(id, composer, work) VALUES(1, 'Haydn', 'Concerto')`,
+		`INSERT INTO sessions(date, piece_id, minutes, confidence, note) VALUES('` + past + `', 1, 30, 4, '')`,
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a := &App{db: db}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /diary/piece/{id}", a.handlePieceDetail)
+	req := httptest.NewRequest(http.MethodGet, "/diary/piece/1", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "confidence 4/5") {
+		t.Fatalf("spark tooltip missing the formatted confidence")
+	}
+	if strings.Contains(body, "%!") {
+		t.Fatalf("body contains a Go format error string")
+	}
+}

@@ -143,7 +143,7 @@
   "piece.sessions": "Sessões",
   "piece.skipped_today": "Saltada hoje: fica fora do plano de hoje.",
   "piece.spark_aria": "evolução da segurança",
-  "piece.spark_point": "%s — segurança %.0f/5",
+  "piece.spark_point": "%s — segurança %d/5",
   "piece.tempo_latest": "último %d BPM",
   "piece.tempo_target": "alvo %d BPM",
   "piece.tempo_title": "Evolução do andamento",

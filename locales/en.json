@@ -143,7 +143,7 @@
   "piece.sessions": "Sessions",
   "piece.skipped_today": "Skipped today: it stays out of today's plan.",
   "piece.spark_aria": "confidence trend",
-  "piece.spark_point": "%s — confidence %.0f/5",
+  "piece.spark_point": "%s — confidence %d/5",
   "piece.tempo_latest": "latest %d BPM",
   "piece.tempo_target": "target %d BPM",
   "piece.tempo_title": "Tempo trend",

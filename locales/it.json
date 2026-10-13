@@ -143,7 +143,7 @@
   "piece.sessions": "Sedute",
   "piece.skipped_today": "Oggi è stato saltato: resta fuori dal piano di oggi.",
   "piece.spark_aria": "andamento sicurezza",
-  "piece.spark_point": "%s — sicurezza %.0f/5",
+  "piece.spark_point": "%s — sicurezza %d/5",
   "piece.tempo_latest": "ultimo %d BPM",
   "piece.tempo_target": "obiettivo %d BPM",
   "piece.tempo_title": "Andamento del tempo",
