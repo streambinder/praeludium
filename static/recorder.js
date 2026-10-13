@@ -49,7 +49,9 @@
       timeEl.textContent = "0:00";
       statusEl.textContent = "";
       startBtn.disabled = false;
+      startBtn.classList.remove("hidden");
       stopBtn.disabled = true;
+      stopBtn.classList.add("hidden");
     }
 
     startBtn.addEventListener("click", function () {
@@ -76,7 +78,9 @@
               });
             clearInterval(timer);
             startBtn.disabled = false;
+            startBtn.classList.remove("hidden");
             stopBtn.disabled = true;
+            stopBtn.classList.add("hidden");
           };
           recorder.start(250);
           startedAt = Date.now();
@@ -87,7 +91,9 @@
             );
           }, 500);
           startBtn.disabled = true;
+          startBtn.classList.add("hidden");
           stopBtn.disabled = false;
+          stopBtn.classList.remove("hidden");
         })
         .catch(function () {
           unsupported.classList.remove("hidden");

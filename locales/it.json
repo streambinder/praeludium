@@ -205,7 +205,7 @@
   "rec.save": "Salva registrazione",
   "rec.share": "Condividi",
   "rec.share_note": "Chi ha il link può ascoltare. Revoca il link per chiudere l'accesso.",
-  "rec.stop": "Ferma",
+  "rec.stop": "Stop",
   "rec.title": "Registrazioni",
   "rec.total": {
     "one": "%d registrazione · %s",

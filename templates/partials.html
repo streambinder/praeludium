@@ -49,7 +49,7 @@
 <div class="recorder" data-recorder data-piece="{{.Piece.ID}}" data-date="{{.RecorderDate}}"{{if .RecorderMockItem}} data-mock-item="{{.RecorderMockItem}}"{{end}}>
 <div class="rec-row">
 <button type="button" data-rec-start>● {{t "rec.record"}}</button>
-<button type="button" class="secondary" data-rec-stop disabled>{{t "rec.stop"}}</button>
+<button type="button" class="secondary hidden" data-rec-stop disabled>{{t "rec.stop"}}</button>
 <span class="meta" data-rec-time>0:00</span>
 <span class="meta" data-rec-status></span>
 </div>
