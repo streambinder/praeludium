@@ -77,3 +77,45 @@ func TestPezzoDetailShowsScore(t *testing.T) {
 		t.Fatalf("piece 3: want the score shown even when skipped")
 	}
 }
+
+// The piece detail chips name the round when the link has one.
+func TestPezzoDetailChipShowsRound(t *testing.T) {
+	db, err := openDB(":memory:")
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer db.Close()
+	if err := migrate(db); err != nil {
+		t.Fatalf("migrate failed: %v", err)
+	}
+	future := time.Now().AddDate(0, 0, 30).Format("2006-01-02")
+	stmts := []string{
+		`INSERT INTO auditions(id, name, audition_date, weight) VALUES(1, 'San Carlo', '` + future + `', 4)`,
+		`INSERT INTO auditions(id, name, audition_date, weight) VALUES(2, 'Opera Roma', '` + future + `', 3)`,
+		`INSERT INTO audition_rounds(id, audition_id, position, name) VALUES(1, 1, 1, 'Finale')`,
+		`INSERT INTO pieces(id, composer, work, kind, difficulty) VALUES(1, 'Beethoven', 'Sinfonia n. 5', 'excerpt', 3)`,
+		`INSERT INTO piece_audition(piece_id, audition_id, excerpt, round_id) VALUES(1, 1, '', 1)`,
+		`INSERT INTO piece_audition(piece_id, audition_id, excerpt, round_id) VALUES(1, 2, '', NULL)`,
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a := &App{db: db}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /diary/piece/{id}", a.handlePieceDetail)
+	req := httptest.NewRequest(http.MethodGet, "/diary/piece/1", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `<span class="chip-round">· Finale</span>`) {
+		t.Fatalf("body missing the round in the San Carlo chip")
+	}
+	if n := strings.Count(body, "chip-round"); n != 1 {
+		t.Fatalf("chip-round spans = %d, want 1 (only the rounded link)", n)
+	}
+}

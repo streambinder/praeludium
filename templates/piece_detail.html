@@ -4,7 +4,7 @@
 <h1><span class="prep-pin pin-title" tabindex="0" aria-label="{{t "prep.label" (pct .Piece.Prep)}}"><span class="prep-dot lv{{.Piece.Level}}"></span><span class="pin-tip" aria-hidden="true">{{t "prep.label" (pct .Piece.Prep)}}</span></span>{{.Piece.Composer}} — {{.Piece.Work}}{{if .Piece.Archived}} <span class="badge muted">{{t "pieces.archived_badge"}}</span>{{end}}</h1>
 {{if .Piece.Movement}}<p class="piece-subtitle">{{.Piece.Movement}}</p>{{end}}
 <div class="concorso-rows">
-{{range .Piece.Auditions}}<div class="concorso-row"><span class="chip{{if .Archived}} muted{{end}}">{{.Name}}<span class="prep-pin" tabindex="0" aria-label="{{t "prep.label" (pct .Prep)}}"><span class="prep-dot lv{{.Level}}"></span><span class="pin-tip" aria-hidden="true">{{t "prep.label" (pct .Prep)}}</span></span></span>{{if .Excerpt}}<span class="meta">{{.Excerpt}}</span>{{end}}</div>
+{{range .Piece.Auditions}}<div class="concorso-row"><span class="chip{{if .Archived}} muted{{end}}">{{.Name}}{{if .RoundName}}<span class="chip-round">· {{.RoundName}}</span>{{end}}<span class="prep-pin" tabindex="0" aria-label="{{t "prep.label" (pct .Prep)}}"><span class="prep-dot lv{{.Level}}"></span><span class="pin-tip" aria-hidden="true">{{t "prep.label" (pct .Prep)}}</span></span></span>{{if .Excerpt}}<span class="meta">{{.Excerpt}}</span>{{end}}</div>
 {{else}}<p class="meta">{{t "piece.none_linked"}}</p>{{end}}
 </div>
 <div class="row btns">
