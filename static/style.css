@@ -1813,7 +1813,7 @@ a:hover {
 
 /* Recordings. */
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 .recorder {
@@ -1857,4 +1857,10 @@ a:hover {
 
 .share-note code {
   word-break: break-all;
+}
+
+.mock-rate {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.6rem;
 }

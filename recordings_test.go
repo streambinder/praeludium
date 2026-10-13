@@ -137,3 +137,70 @@ func TestRecordingLifecycleAndSharing(t *testing.T) {
 		t.Fatalf("deleted audio = %d, want 404", rec.Code)
 	}
 }
+
+func TestRecordingHelpersAndEdges(t *testing.T) {
+	extCases := map[string]string{
+		"audio/webm": ".webm", "audio/ogg": ".ogg", "audio/mp4": ".mp4",
+		"audio/mpeg": ".mp3", "audio/wav": ".wav", "application/octet-stream": ".webm",
+	}
+	for ct, want := range extCases {
+		if got := recordingExt(ct); got != want {
+			t.Errorf("recordingExt(%q) = %q, want %q", ct, got, want)
+		}
+	}
+	ctCases := map[string]string{
+		"a.webm": "audio/webm", "a.ogg": "audio/ogg", "a.mp4": "audio/mp4",
+		"a.mp3": "audio/mpeg", "a.wav": "audio/wav", "a.bin": "application/octet-stream",
+	}
+	for name, want := range ctCases {
+		if got := recordingContentType(name); got != want {
+			t.Errorf("recordingContentType(%q) = %q, want %q", name, got, want)
+		}
+	}
+	if got := humanBytes("en", 512); got != "512 B" {
+		t.Errorf("humanBytes B = %q", got)
+	}
+	if got := humanBytes("it", 3<<10); got != "3,0 KB" {
+		t.Errorf("humanBytes KB = %q", got)
+	}
+	if got := humanBytes("it", 1572864); got != "1,5 MB" {
+		t.Errorf("humanBytes MB = %q", got)
+	}
+
+	a, mux := recordingsTestApp(t)
+	// Unknown ids answer 404 on every recording route.
+	for _, path := range []string{"/recordings/9/audio"} {
+		if rec := get(t, mux, path); rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", path, rec.Code)
+		}
+	}
+	for _, path := range []string{"/recordings/9/delete", "/recordings/9/share", "/recordings/9/share/revoke", "/recordings/x/delete"} {
+		if rec := post(t, mux, path); rec.Code != http.StatusNotFound {
+			t.Errorf("POST %s = %d, want 404", path, rec.Code)
+		}
+	}
+	if rec := get(t, mux, "/share/nope/audio"); rec.Code != http.StatusNotFound {
+		t.Errorf("shared audio bad token = %d, want 404", rec.Code)
+	}
+	if rec := uploadTake(t, mux, "99", true); rec.Code != http.StatusNotFound {
+		t.Errorf("upload to missing piece = %d, want 404", rec.Code)
+	}
+	// A row whose file vanished answers 404 on playback.
+	if _, err := a.db.Exec(`INSERT INTO recordings(id, piece_id, taken_on, filename) VALUES(5, 1, '2026-10-01', 'gone.webm')`); err != nil {
+		t.Fatal(err)
+	}
+	if rec := get(t, mux, "/recordings/5/audio"); rec.Code != http.StatusNotFound {
+		t.Errorf("missing file audio = %d, want 404", rec.Code)
+	}
+	// Sharing twice keeps one token.
+	_ = uploadTake(t, mux, "1", true)
+	recs, _ := a.pieceRecordings(1)
+	id := recs[0].ID
+	_ = post(t, mux, "/recordings/"+intStr(id)+"/share")
+	first, _ := a.recordingByID(id)
+	_ = post(t, mux, "/recordings/"+intStr(id)+"/share")
+	second, _ := a.recordingByID(id)
+	if first.ShareToken == "" || first.ShareToken != second.ShareToken {
+		t.Errorf("token changed on re-share: %q -> %q", first.ShareToken, second.ShareToken)
+	}
+}

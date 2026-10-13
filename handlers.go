@@ -55,6 +55,11 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /recordings/{id}/share/revoke", a.handleRevokeShare)
 	mux.HandleFunc("GET /share/{token}", a.handleSharedPage)
 	mux.HandleFunc("GET /share/{token}/audio", a.handleSharedAudio)
+	mux.HandleFunc("GET /auditions/{id}/mock", a.handleMockSetup)
+	mux.HandleFunc("POST /auditions/{id}/mock", a.handleMockCreate)
+	mux.HandleFunc("GET /auditions/{id}/mock/{mockID}", a.handleMockRun)
+	mux.HandleFunc("POST /auditions/{id}/mock/{mockID}/rate", a.handleMockRate)
+	mux.HandleFunc("POST /auditions/{id}/mock/{mockID}/delete", a.handleMockDelete)
 	registerLegacyRedirects(mux)
 }
 
@@ -1603,6 +1608,7 @@ type auditionDetailData struct {
 	Pieces        []Piece
 	PrepMap       []prepTile
 	PrepMapMobile []prepTile
+	Mocks         []Mock
 }
 
 func (a *App) handleAuditionDetail(w http.ResponseWriter, r *http.Request) {
@@ -1645,11 +1651,19 @@ func (a *App) handleAuditionDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	mocks, err := a.auditionMocks(c.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for i := range mocks {
+		mocks[i].MeanText = decimal(langFor(r), mocks[i].Mean)
+	}
 	a.render(w, r, "audition_detail.html", auditionDetailData{
 		Title: c.Name, Nav: "auditions", Audition: c,
 		Concluded: !c.Archived && c.Date < todayStr(),
 		Links:     links, Pieces: pieces,
-		PrepMap: prep, PrepMapMobile: prepMobile,
+		PrepMap: prep, PrepMapMobile: prepMobile, Mocks: mocks,
 	})
 }
 
@@ -2055,14 +2069,15 @@ func (a *App) handleDiaryDay(w http.ResponseWriter, r *http.Request) {
 }
 
 type pieceDetailData struct {
-	Title        string
-	Nav          string
-	Piece        Piece
-	Sessions     []Session
-	Spark        sparkline
-	Score        pezzoScore
-	Recordings   []recordingRow
-	RecorderDate string
+	Title            string
+	Nav              string
+	Piece            Piece
+	Sessions         []Session
+	Spark            sparkline
+	Score            pezzoScore
+	Recordings       []recordingRow
+	RecorderDate     string
+	RecorderMockItem int64
 }
 
 // pezzoScore is the piece's standing in today's plan scoring, shown on

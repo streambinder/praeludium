@@ -139,6 +139,17 @@ func (a *App) handleUploadRecording(w http.ResponseWriter, r *http.Request) {
 	if duration < 0 {
 		duration = 0
 	}
+	// A take may belong to a mock audition item; the item must be an
+	// item of this very piece, anything else is ignored.
+	var mockItem sql.NullInt64
+	if raw := strings.TrimSpace(r.FormValue("mock_item_id")); raw != "" {
+		if itemID, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			var itemPiece int64
+			if err := a.db.QueryRow(`SELECT piece_id FROM mock_items WHERE id=?`, itemID).Scan(&itemPiece); err == nil && itemPiece == p.ID {
+				mockItem = sql.NullInt64{Int64: itemID, Valid: true}
+			}
+		}
+	}
 	name, err := randomHex(12)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -162,8 +173,8 @@ func (a *App) handleUploadRecording(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "upload failed", http.StatusInternalServerError)
 		return
 	}
-	res, err := a.db.Exec(`INSERT INTO recordings(piece_id, taken_on, filename, duration_sec, size_bytes)
-		VALUES(?,?,?,?,?)`, p.ID, takenOn, filename, duration, size)
+	res, err := a.db.Exec(`INSERT INTO recordings(piece_id, mock_item_id, taken_on, filename, duration_sec, size_bytes)
+		VALUES(?,?,?,?,?,?)`, p.ID, mockItem, takenOn, filename, duration, size)
 	if err != nil {
 		_ = os.Remove(filepath.Join(dir, filename))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
