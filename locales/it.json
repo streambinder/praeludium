@@ -60,6 +60,7 @@
   "err.link_missing": "link risorsa mancante",
   "err.name_date_required": "nome e data sono obbligatori",
   "err.piece_invalid": "pezzo non valido",
+  "err.recording_missing": "Nessun audio ricevuto.",
   "err.round_name_required": "Il nome del turno è obbligatorio.",
   "err.session_invalid": "dati seduta non validi",
   "err.time_invalid": "orario non valido",
@@ -164,6 +165,23 @@
   "prepmap.title": "Mappa di sicurezza",
   "readiness.note": "Media della sicurezza dei pezzi collegati a ciascun concorso.",
   "readiness.title": "Sicurezza per concorso",
+  "rec.copy_link": "Copia link",
+  "rec.delete": "Elimina",
+  "rec.discard": "Scarta",
+  "rec.empty": "Ancora nessuna registrazione.",
+  "rec.mock": "Prova simulata",
+  "rec.record": "Registra",
+  "rec.revoke": "Revoca link",
+  "rec.save": "Salva registrazione",
+  "rec.share": "Condividi",
+  "rec.share_note": "Chi ha il link può ascoltare. Revoca il link per chiudere l'accesso.",
+  "rec.stop": "Ferma",
+  "rec.title": "Registrazioni",
+  "rec.total": {
+    "one": "%d registrazione · %s",
+    "other": "%d registrazioni · %s"
+  },
+  "rec.unsupported": "La registrazione non è supportata in questo browser.",
   "resources.count": {
     "one": "%d risorsa",
     "other": "%d risorse"

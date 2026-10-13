@@ -34,6 +34,29 @@
 </section>
 {{end}}
 
+<section class="panel reveal" id="recorder">
+<div class="section-head"><h2>{{t "rec.title"}}</h2><span class="meta">{{len .Recordings}}</span></div>
+{{template "recorder" .}}
+{{if .Recordings}}
+<div class="rec-list">
+{{range .Recordings}}
+<div class="rec-item">
+<div class="rec-row">
+<span><strong>{{.DateLabel}}</strong> · {{.DurationLabel}}{{if .Rec.MockItemID.Valid}} · <span class="badge">{{t "rec.mock"}}</span>{{end}}</span>
+<span class="rec-actions">
+{{if .Rec.ShareToken}}<button type="button" class="secondary" data-copy="/share/{{.Rec.ShareToken}}">{{t "rec.copy_link"}}</button>{{end}}
+<form method="post" action="/recordings/{{.Rec.ID}}/{{if .Rec.ShareToken}}share/revoke{{else}}share{{end}}" class="inline"><button class="secondary" type="submit">{{if .Rec.ShareToken}}{{t "rec.revoke"}}{{else}}{{t "rec.share"}}{{end}}</button></form>
+<form method="post" action="/recordings/{{.Rec.ID}}/delete" class="inline"><button class="secondary" type="submit">{{t "rec.delete"}}</button></form>
+</span>
+</div>
+{{if .Rec.ShareToken}}<p class="meta share-note">{{t "rec.share_note"}} <code>/share/{{.Rec.ShareToken}}</code></p>{{end}}
+<audio controls preload="none" src="/recordings/{{.Rec.ID}}/audio"></audio>
+</div>
+{{end}}
+</div>
+{{else}}<p class="empty">{{t "rec.empty"}}</p>{{end}}
+</section>
+
 <section class="panel reveal">
 <div class="section-head"><h2>{{t "piece.today_score"}}</h2>{{if .Score.HasUpcoming}}<span class="meta">{{f1 .Score.Score}}</span>{{end}}</div>
 {{if not .Score.HasUpcoming}}
