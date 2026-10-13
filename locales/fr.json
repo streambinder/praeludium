@@ -143,7 +143,7 @@
   "piece.sessions": "Séances",
   "piece.skipped_today": "Passé aujourd'hui : il reste hors du plan du jour.",
   "piece.spark_aria": "évolution de la confiance",
-  "piece.spark_point": "%s — confiance %.0f/5",
+  "piece.spark_point": "%s — confiance %d/5",
   "piece.tempo_latest": "dernier %d BPM",
   "piece.tempo_target": "cible %d BPM",
   "piece.tempo_title": "Évolution du tempo",

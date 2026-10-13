@@ -143,7 +143,7 @@
   "piece.sessions": "Einheiten",
   "piece.skipped_today": "Heute übersprungen: Es bleibt außerhalb des heutigen Plans.",
   "piece.spark_aria": "Verlauf der Sicherheit",
-  "piece.spark_point": "%s — Sicherheit %.0f/5",
+  "piece.spark_point": "%s — Sicherheit %d/5",
   "piece.tempo_latest": "zuletzt %d BPM",
   "piece.tempo_target": "Ziel %d BPM",
   "piece.tempo_title": "Tempoverlauf",
