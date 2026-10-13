@@ -1,18 +1,18 @@
 // Per-piece audio recorder: one take per piece, saved through the
 // piece recordings endpoint. Also wires the share-link copy buttons.
-(function () {
+(() => {
   function fmt(s) {
-    return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   }
 
-  document.querySelectorAll("[data-copy]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
+  document.querySelectorAll("[data-copy]").forEach((btn) => {
+    btn.addEventListener("click", () => {
       var url = window.location.origin + btn.getAttribute("data-copy");
       if (navigator.clipboard) {
-        navigator.clipboard.writeText(url).then(function () {
+        navigator.clipboard.writeText(url).then(() => {
           var old = btn.textContent;
           btn.textContent = "✓";
-          setTimeout(function () {
+          setTimeout(() => {
             btn.textContent = old;
           }, 1500);
         });
@@ -20,7 +20,7 @@
     });
   });
 
-  document.querySelectorAll("[data-recorder]").forEach(function (root) {
+  document.querySelectorAll("[data-recorder]").forEach((root) => {
     var startBtn = root.querySelector("[data-rec-start]");
     var stopBtn = root.querySelector("[data-rec-stop]");
     var timeEl = root.querySelector("[data-rec-time]");
@@ -49,25 +49,28 @@
     function startMeter() {
       var AC = window.AudioContext || window.webkitAudioContext;
       if (!AC || !stream || !meter) return;
+      var analyser;
+      var data;
       try {
         audioCtx = new AC();
         if (audioCtx.state === "suspended") audioCtx.resume();
-        var analyser = audioCtx.createAnalyser();
+        analyser = audioCtx.createAnalyser();
         analyser.fftSize = 2048;
         audioCtx.createMediaStreamSource(stream).connect(analyser);
-        var data = new Uint8Array(analyser.fftSize);
+        data = new Uint8Array(analyser.fftSize);
         meter.classList.remove("hidden");
-        meterTimer = setInterval(function () {
+        meterTimer = setInterval(() => {
           analyser.getByteTimeDomainData(data);
           var peak = 0;
-          for (var i = 0; i < data.length; i++) {
-            var v = Math.abs(data[i] - 128) / 128;
+          var i;
+          var v;
+          for (i = 0; i < data.length; i++) {
+            v = Math.abs(data[i] - 128) / 128;
             if (v > peak) peak = v;
           }
-          meterFill.style.width =
-            Math.min(100, Math.round(peak * 100)) + "%";
+          meterFill.style.width = `${Math.min(100, Math.round(peak * 100))}%`;
         }, 100);
-      } catch (e) {
+      } catch {
         stopMeter();
       }
     }
@@ -99,17 +102,17 @@
       stopBtn.classList.add("hidden");
     }
 
-    startBtn.addEventListener("click", function () {
+    startBtn.addEventListener("click", () => {
       navigator.mediaDevices
         .getUserMedia({ audio: true })
-        .then(function (s) {
+        .then((s) => {
           stream = s;
           chunks = [];
           recorder = new MediaRecorder(stream);
-          recorder.ondataavailable = function (e) {
-            if (e.data && e.data.size) chunks.push(e.data);
+          recorder.ondataavailable = (e) => {
+            if (e.data?.size) chunks.push(e.data);
           };
-          recorder.onstop = function () {
+          recorder.onstop = () => {
             duration = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
             blob = new Blob(chunks, {
               type: recorder.mimeType || "audio/webm",
@@ -119,7 +122,7 @@
             preview.classList.remove("hidden");
             actions.classList.remove("hidden");
             if (stream)
-              stream.getTracks().forEach(function (t) {
+              stream.getTracks().forEach((t) => {
                 t.stop();
               });
             clearInterval(timer);
@@ -133,7 +136,7 @@
           startMeter();
           startedAt = Date.now();
           timeEl.textContent = "0:00";
-          timer = setInterval(function () {
+          timer = setInterval(() => {
             timeEl.textContent = fmt(
               Math.floor((Date.now() - startedAt) / 1000),
             );
@@ -143,47 +146,45 @@
           stopBtn.disabled = false;
           stopBtn.classList.remove("hidden");
         })
-        .catch(function () {
+        .catch(() => {
           unsupported.classList.remove("hidden");
         });
     });
 
-    stopBtn.addEventListener("click", function () {
+    stopBtn.addEventListener("click", () => {
       if (recorder && recorder.state !== "inactive") recorder.stop();
     });
 
     root.querySelector("[data-rec-discard]").addEventListener("click", reset);
 
-    root
-      .querySelector("[data-rec-save]")
-      .addEventListener("click", function () {
-        if (!blob) return;
-        var fd = new FormData();
-        fd.append("audio", blob, "take");
-        fd.append("taken_on", root.getAttribute("data-date"));
+    root.querySelector("[data-rec-save]").addEventListener("click", () => {
+      if (!blob) return;
+      var fd = new FormData();
+      fd.append("audio", blob, "take");
+      fd.append("taken_on", root.getAttribute("data-date"));
       if (root.getAttribute("data-mock-item")) {
         fd.append("mock_item_id", root.getAttribute("data-mock-item"));
       }
-        fd.append("duration_sec", String(duration));
-        saveBtn.disabled = true;
-        statusEl.textContent = "…";
-        fetch("/pieces/" + root.getAttribute("data-piece") + "/recordings", {
-          method: "POST",
-          body: fd,
-        })
-          .then(function (resp) {
-            if (resp.ok) {
-              window.location.reload();
-            } else {
-              statusEl.textContent = "✗";
-              saveBtn.disabled = false;
-            }
-          })
-          .catch(function () {
+      fd.append("duration_sec", String(duration));
+      saveBtn.disabled = true;
+      statusEl.textContent = "…";
+      fetch(`/pieces/${root.getAttribute("data-piece")}/recordings`, {
+        method: "POST",
+        body: fd,
+      })
+        .then((resp) => {
+          if (resp.ok) {
+            window.location.reload();
+          } else {
             statusEl.textContent = "✗";
             saveBtn.disabled = false;
-          });
-      });
+          }
+        })
+        .catch(() => {
+          statusEl.textContent = "✗";
+          saveBtn.disabled = false;
+        });
+    });
     var saveBtn = root.querySelector("[data-rec-save]");
   });
 })();

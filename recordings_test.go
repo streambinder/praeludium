@@ -41,8 +41,12 @@ func uploadTake(t *testing.T, mux *http.ServeMux, pieceID string, withFile bool)
 			t.Fatal(err)
 		}
 	}
-	_ = mw.WriteField("taken_on", "2026-10-12")
-	_ = mw.WriteField("duration_sec", "75")
+	if err := mw.WriteField("taken_on", "2026-10-12"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteField("duration_sec", "75"); err != nil {
+		t.Fatal(err)
+	}
 	if err := mw.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -88,8 +92,11 @@ func TestRecordingLifecycleAndSharing(t *testing.T) {
 	if saved.DurationSec != 75 || saved.TakenOn != "2026-10-12" || saved.SizeBytes != int64(len("fake-audio-bytes")) {
 		t.Errorf("saved = %+v", saved)
 	}
-	dir, _ := a.recordingsDir()
-	if _, err := os.Stat(filepath.Join(dir, saved.Filename)); err != nil {
+	dir, err := a.recordingsDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(filepath.Join(dir, saved.Filename)); err != nil {
 		t.Fatalf("audio file missing: %v", err)
 	}
 	audioPath := "/recordings/" + intStr(saved.ID) + "/audio"
@@ -194,12 +201,21 @@ func TestRecordingHelpersAndEdges(t *testing.T) {
 	}
 	// Sharing twice keeps one token.
 	_ = uploadTake(t, mux, "1", true)
-	recs, _ := a.pieceRecordings(1)
+	recs, err := a.pieceRecordings(1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	id := recs[0].ID
 	_ = post(t, mux, "/recordings/"+intStr(id)+"/share")
-	first, _ := a.recordingByID(id)
+	first, err := a.recordingByID(id)
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = post(t, mux, "/recordings/"+intStr(id)+"/share")
-	second, _ := a.recordingByID(id)
+	second, err := a.recordingByID(id)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if first.ShareToken == "" || first.ShareToken != second.ShareToken {
 		t.Errorf("token changed on re-share: %q -> %q", first.ShareToken, second.ShareToken)
 	}

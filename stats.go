@@ -383,10 +383,8 @@ func currentStreak(days []dayTotal, today string) int {
 }
 
 func buildConstChart(counts []weekCount) distChart {
-	totals := make([]int, 0, len(counts))
 	maxDays := 0
 	for _, c := range counts {
-		totals = append(totals, c.Days)
 		if c.Days > maxDays {
 			maxDays = c.Days
 		}
@@ -434,64 +432,59 @@ type diaryStats struct {
 	Streak     int
 }
 
-func (a *App) diaryStats(lang string) (diaryStats, error) {
-	var out diaryStats
+// pieceTotals reads the total studied minutes of every piece
+// that has any.
+func (a *App) pieceTotals() ([]int, error) {
 	rows, err := a.db.Query(`SELECT COALESCE(SUM(minutes),0) FROM sessions GROUP BY piece_id HAVING SUM(minutes) > 0`)
 	if err != nil {
-		return out, err
+		return nil, err
 	}
+	defer rows.Close()
 	var totals []int
 	for rows.Next() {
 		var tot int
 		if err := rows.Scan(&tot); err != nil {
-			rows.Close()
-			return out, err
+			return nil, err
 		}
 		totals = append(totals, tot)
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
-		return out, err
+		return nil, err
 	}
-	if len(totals) > 0 {
-		out.Dist = buildDistChart(totals)
-		out.DistPieces = len(totals)
-		out.HasDist = true
-	}
+	return totals, nil
+}
+
+// dayTotals reads the studied minutes of every day that has any,
+// oldest first.
+func (a *App) dayTotals() ([]dayTotal, error) {
 	drows, err := a.db.Query(`SELECT date, COALESCE(SUM(minutes),0) FROM sessions GROUP BY date HAVING SUM(minutes) > 0 ORDER BY date`)
 	if err != nil {
-		return out, err
+		return nil, err
 	}
 	defer drows.Close()
 	var days []dayTotal
 	for drows.Next() {
 		var d dayTotal
 		if err := drows.Scan(&d.Date, &d.Minutes); err != nil {
-			return out, err
+			return nil, err
 		}
 		days = append(days, d)
 	}
 	if err := drows.Err(); err != nil {
-		return out, err
+		return nil, err
 	}
-	if weeks := aggregateWeeks(days); len(weeks) > 0 {
-		out.Weeks = buildWeekChart(weeks, lang)
-		out.HasWeeks = true
-	}
-	if counts := weekCounts(days); len(counts) > 0 {
-		out.Const = buildConstChart(counts)
-		out.HasConst = true
-	}
-	out.Streak = currentStreak(days, todayStr())
+	return days, nil
+}
 
-	// Study time per audition: a session counts toward every audition
-	// its piece is linked to.
+// auditionTimeRows totals the study time of every audition: a
+// session counts toward every audition its piece is linked to.
+func (a *App) auditionTimeRows() ([]statRow, error) {
 	arows, err := a.db.Query(`SELECT au.name, SUM(s.minutes) FROM sessions s
 		JOIN piece_audition pa ON pa.piece_id = s.piece_id
 		JOIN auditions au ON au.id = pa.audition_id
 		WHERE s.minutes > 0 GROUP BY au.id ORDER BY SUM(s.minutes) DESC`)
 	if err != nil {
-		return out, err
+		return nil, err
 	}
 	defer arows.Close()
 	maxMin := 0
@@ -501,7 +494,7 @@ func (a *App) diaryStats(lang string) (diaryStats, error) {
 		var name string
 		var minutes int
 		if err := arows.Scan(&name, &minutes); err != nil {
-			return out, err
+			return nil, err
 		}
 		if minutes > maxMin {
 			maxMin = minutes
@@ -510,18 +503,24 @@ func (a *App) diaryStats(lang string) (diaryStats, error) {
 		audMin = append(audMin, minutes)
 	}
 	if err := arows.Err(); err != nil {
-		return out, err
+		return nil, err
 	}
 	for i := range audRows {
 		if maxMin > 0 {
 			audRows[i].Pct = audMin[i] * 100 / maxMin
 		}
 	}
-	out.Auditions = audRows
+	return audRows, nil
+}
 
-	// Coverage: pieces studied in the last 14 days over the linked
-	// pieces, for each upcoming audition.
-	today, _ := time.Parse("2006-01-02", todayStr())
+// coverageRows measures, for each upcoming audition, how many of
+// its pieces saw study time or a mock in the last 14 days.
+func (a *App) coverageRows() ([]statRow, error) {
+	var coverage []statRow
+	today, terr := time.Parse("2006-01-02", todayStr())
+	if terr != nil {
+		today = time.Time{}
+	}
 	since := today.AddDate(0, 0, -13).Format("2006-01-02")
 	// A piece counts as touched when it has study time in the window
 	// or was played in a mock audition in the window.
@@ -537,27 +536,67 @@ func (a *App) diaryStats(lang string) (diaryStats, error) {
 		WHERE au.archived_at IS NULL AND au.audition_date >= ?
 		GROUP BY au.id ORDER BY au.audition_date`, since, since, todayStr())
 	if err != nil {
-		return out, err
+		return nil, err
 	}
 	defer crows.Close()
 	for crows.Next() {
 		var name string
 		var total, touched int
 		if err := crows.Scan(&name, &total, &touched); err != nil {
-			return out, err
+			return nil, err
 		}
 		if total == 0 {
 			continue
 		}
 		pct := touched * 100 / total
-		out.Coverage = append(out.Coverage, statRow{
+		coverage = append(coverage, statRow{
 			Name: name, Pct: pct,
 			Val: fmt.Sprintf("%d/%d · %d%%", touched, total, pct),
 		})
 	}
 	if err := crows.Err(); err != nil {
+		return nil, err
+	}
+
+	return coverage, nil
+}
+
+func (a *App) diaryStats(lang string) (diaryStats, error) {
+	var out diaryStats
+	totals, err := a.pieceTotals()
+	if err != nil {
 		return out, err
 	}
+	if len(totals) > 0 {
+		out.Dist = buildDistChart(totals)
+		out.DistPieces = len(totals)
+		out.HasDist = true
+	}
+	days, err := a.dayTotals()
+	if err != nil {
+		return out, err
+	}
+	if weeks := aggregateWeeks(days); len(weeks) > 0 {
+		out.Weeks = buildWeekChart(weeks, lang)
+		out.HasWeeks = true
+	}
+	if counts := weekCounts(days); len(counts) > 0 {
+		out.Const = buildConstChart(counts)
+		out.HasConst = true
+	}
+	out.Streak = currentStreak(days, todayStr())
+
+	audRows, err := a.auditionTimeRows()
+	if err != nil {
+		return out, err
+	}
+	out.Auditions = audRows
+
+	coverage, err := a.coverageRows()
+	if err != nil {
+		return out, err
+	}
+	out.Coverage = coverage
 
 	// Mean confidence of studied, rated sessions, by week.
 	srows, err := a.db.Query(`SELECT date, confidence FROM sessions WHERE minutes > 0 AND confidence > 0 ORDER BY date`)

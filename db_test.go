@@ -118,7 +118,7 @@ func TestEnsureLinkExcerptVariants(t *testing.T) {
 	}
 	// A table that already has excerpt: migration is a no-op there.
 	db2 := rawDB(t, `CREATE TABLE piece_audition(piece_id INTEGER NOT NULL, audition_id INTEGER NOT NULL, excerpt TEXT NOT NULL DEFAULT '')`)
-	if err := migrate(db2); err != nil {
+	if err = migrate(db2); err != nil {
 		t.Fatalf("migrate with excerpt column: %v", err)
 	}
 	cols, err = tableColumns(db2, "piece_audition")
@@ -136,7 +136,7 @@ func TestMigrateOnReadOnlyAndClosedDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Close(); err != nil {
+	if err = db.Close(); err != nil {
 		t.Fatal(err)
 	}
 	ro, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
@@ -144,7 +144,7 @@ func TestMigrateOnReadOnlyAndClosedDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ro.Close()
-	if err := migrate(ro); err == nil {
+	if err = migrate(ro); err == nil {
 		t.Error("migrate on a read-only database: want error")
 	}
 	closed, err := sql.Open("sqlite", ":memory:")
@@ -193,7 +193,7 @@ func TestGetCoeffsStoredValues(t *testing.T) {
 	if got != DefaultCoeffs() {
 		t.Fatalf("defaults: got %+v", got)
 	}
-	if err := a.setCoeff("urgency_k", 4.5); err != nil {
+	if err = a.setCoeff("urgency_k", 4.5); err != nil {
 		t.Fatal(err)
 	}
 	got, err = a.getCoeffs()
@@ -203,9 +203,9 @@ func TestGetCoeffsStoredValues(t *testing.T) {
 	if got.UrgencyK != 4.5 {
 		t.Fatalf("stored coefficient: got %+v", got)
 	}
-	// Unparseable and non-positive stored values are ignored.
+	// Stored values that fail to parse or are not positive are ignored.
 	for _, bad := range []string{"abc", "-3", "0", ""} {
-		if _, err := db.Exec(`INSERT INTO settings(key,value) VALUES('recency_cap',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, bad); err != nil {
+		if _, err = db.Exec(`INSERT INTO settings(key,value) VALUES('recency_cap',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, bad); err != nil {
 			t.Fatal(err)
 		}
 		got, err = a.getCoeffs()
@@ -276,7 +276,7 @@ func TestCloseRowsHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := closeRows(rows); err != nil {
+	if err = closeRows(rows); err != nil {
 		t.Fatalf("closeRows: %v", err)
 	}
 	rows, err = db.Query(`SELECT 1`)
@@ -325,7 +325,7 @@ func TestTodayMarkNotes(t *testing.T) {
 		t.Fatalf("todayMark: got %+v", m)
 	}
 	// A piece practiced in the future counts as zero days, not negative.
-	if _, err := db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES('2027-01-01', 1, 10, 3)`); err != nil {
+	if _, err = db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES('2027-01-01', 1, 10, 3)`); err != nil {
 		t.Fatal(err)
 	}
 	days, ok, err := a.daysSincePractice(1, "2026-10-10")
@@ -370,7 +370,7 @@ func TestMigrateBrokenSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := seed.Close(); err != nil {
+	if err = seed.Close(); err != nil {
 		t.Fatal(err)
 	}
 	ro, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
@@ -378,7 +378,7 @@ func TestMigrateBrokenSchemas(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ro.Close()
-	if err := migrate(ro); err == nil {
+	if err = migrate(ro); err == nil {
 		t.Error("migrate on an empty read-only database: want error")
 	}
 	// openDB surfaces the migration failure of a broken schema.

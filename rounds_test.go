@@ -99,7 +99,10 @@ func TestRoundAddDeleteAndLink(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("add foreign round status = %d", rec.Code)
 	}
-	foreign, _ := a.auditionRounds(2)
+	foreign, err := a.auditionRounds(2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	rec = serve(http.MethodPost, "/pieces/1/edit", url.Values{
 		"composer": {"Alfa"}, "work": {"Pezzo"}, "kind": {"excerpt"}, "difficulty": {"3"},
 		"audition": {"1"}, "round-1": {intStr(foreign[0].ID)},
@@ -107,7 +110,9 @@ func TestRoundAddDeleteAndLink(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("piece update 2 status = %d", rec.Code)
 	}
-	p, _ = a.getPiece(1)
+	if p, err = a.getPiece(1); err != nil {
+		t.Fatal(err)
+	}
 	if len(p.Auditions) == 1 && p.Auditions[0].RoundID.Valid {
 		t.Errorf("foreign round attached: %+v", p.Auditions[0])
 	}
@@ -125,7 +130,9 @@ func TestRoundAddDeleteAndLink(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("delete round status = %d", rec.Code)
 	}
-	p, _ = a.getPiece(1)
+	if p, err = a.getPiece(1); err != nil {
+		t.Fatal(err)
+	}
 	if len(p.Auditions) == 1 && p.Auditions[0].RoundID.Valid {
 		t.Errorf("round still attached after delete: %+v", p.Auditions[0])
 	}

@@ -570,8 +570,8 @@ func TestForecastDirectBranches(t *testing.T) {
 	}
 	// A last practice day in the past gives a positive gap.
 	in.last = "2026-10-01"
-	if _, ok, err := f.scoreOn(in, "2026-10-10"); err != nil || !ok {
-		t.Fatalf("scoreOn past last practice: ok=%v err=%v", ok, err)
+	if _, ok, serr := f.scoreOn(in, "2026-10-10"); serr != nil || !ok {
+		t.Fatalf("scoreOn past last practice: ok=%v err=%v", ok, serr)
 	}
 
 	// Entry-date sorting falls back to base when scores tie: the
@@ -593,12 +593,12 @@ func TestForecastDirectBranches(t *testing.T) {
 	f3 := &planForecaster{coeffs: DefaultCoeffs(), inputs: []forecastInput{
 		{id: 1, auditions: []Audition{{ID: 1, Date: day, Weight: 3}}, conf: 3, diff: 3, last: "garbage"},
 	}}
-	if _, _, _, err := f3.entryDate(1, todayStr()); err == nil {
+	if _, _, _, serr := f3.entryDate(1, todayStr()); serr == nil {
 		t.Error("entryDate with an invalid last practice date: want error")
 	}
 	// entryReason with an invalid last practice date fails in scoreOn.
 	target := forecastInput{id: 1, auditions: []Audition{{ID: 1, Date: "2027-01-01", Weight: 3}}, conf: 3, diff: 3, last: "garbage"}
-	if _, err := f.entryReason(&target, "2026-10-10", "2026-12-01"); err == nil {
+	if _, err = f.entryReason(&target, "2026-10-10", "2026-12-01"); err == nil {
 		t.Error("entryReason with an invalid last practice date: want error")
 	}
 	// Far beyond the urgency horizon on both days, the reason is the

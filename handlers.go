@@ -586,58 +586,69 @@ func (f *planForecaster) entryDate(targetID int64, today string) (date string, s
 	if err != nil {
 		return "", 0, "", err
 	}
-	type scored struct {
-		id int64
-		br ScoreBreakdown
-	}
 	for d := day.AddDate(0, 0, 1); ; d = d.AddDate(0, 0, 1) {
 		ds := d.Format("2006-01-02")
 		if ds > last {
 			break
 		}
-		var ss []scored
-		var tScore float64
-		var tOK bool
-		for _, in := range f.inputs {
-			br, ok, err := f.scoreOn(in, ds)
-			if err != nil {
-				return "", 0, "", err
-			}
-			if !ok {
-				continue
-			}
-			ss = append(ss, scored{in.id, br})
-			if in.id == targetID {
-				tScore, tOK = br.Score, true
-			}
+		rank, tScore, tOK, serr := f.entryRank(ds, targetID)
+		if serr != nil {
+			return "", 0, "", serr
 		}
 		if !tOK {
 			break
 		}
-		sort.SliceStable(ss, func(i, j int) bool {
-			if ss[i].br.Score != ss[j].br.Score {
-				return ss[i].br.Score > ss[j].br.Score
-			}
-			if ss[i].br.Base != ss[j].br.Base {
-				return ss[i].br.Base > ss[j].br.Base
-			}
-			return ss[i].id < ss[j].id
-		})
-		rank := 0
-		for i, s := range ss {
-			if s.id == targetID {
-				rank = i + 1
-			}
-		}
 		if rank > 0 && rank <= 8 {
-			reason, err := f.entryReason(target, today, ds)
-			if err != nil {
-				return "", 0, "", err
+			reason, rerr := f.entryReason(target, today, ds)
+			if rerr != nil {
+				return "", 0, "", rerr
 			}
 			return ds, tScore, reason, nil
 		}
 	}
 	return "", 0, "", nil
+}
+
+// entryRank scores every input on one day and reports the rank
+// of the target and its score. ok is false when the target does
+// not score at all on that day.
+func (f *planForecaster) entryRank(ds string, targetID int64) (rank int, tScore float64, ok bool, err error) {
+	type scored struct {
+		id int64
+		br ScoreBreakdown
+	}
+	var ss []scored
+	for _, in := range f.inputs {
+		br, sok, serr := f.scoreOn(in, ds)
+		if serr != nil {
+			return 0, 0, false, serr
+		}
+		if !sok {
+			continue
+		}
+		ss = append(ss, scored{in.id, br})
+		if in.id == targetID {
+			tScore, ok = br.Score, true
+		}
+	}
+	if !ok {
+		return 0, 0, false, nil
+	}
+	sort.SliceStable(ss, func(i, j int) bool {
+		if ss[i].br.Score != ss[j].br.Score {
+			return ss[i].br.Score > ss[j].br.Score
+		}
+		if ss[i].br.Base != ss[j].br.Base {
+			return ss[i].br.Base > ss[j].br.Base
+		}
+		return ss[i].id < ss[j].id
+	})
+	for i, s := range ss {
+		if s.id == targetID {
+			rank = i + 1
+		}
+	}
+	return rank, tScore, true, nil
 }
 
 // entryReason explains what pushes the piece into the top 8 on its
@@ -759,61 +770,14 @@ func (a *App) autoSkipOverflow(items []planItem, remaining, grace int, today str
 	return items, nil
 }
 
-func (a *App) handleToday(w http.ResponseWriter, r *http.Request) {
-	today := todayStr()
-	avail, err := a.availabilityFor(today)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	data := todayData{Title: tr(langFor(r), "nav.today"), Nav: "today", Date: today, HasAvailability: len(avail) > 0}
-	for _, v := range avail {
-		if v.Kind == "busy" {
-			data.Busy = append(data.Busy, v)
-		} else {
-			data.Free = append(data.Free, v)
-			data.Budget += v.EndMin - v.StartMin
-		}
-	}
-	var logged int
-	if err := a.db.QueryRow(`SELECT COALESCE(SUM(minutes), 0) FROM sessions WHERE date=?`, today).Scan(&logged); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	data.Logged = logged
-	if data.Budget > 0 {
-		data.LoggedPct = logged * 100 / data.Budget
-		data.BudgetPct = data.LoggedPct
-		if data.BudgetPct > 100 {
-			data.BudgetPct = 100
-		}
-	}
-	pieces, err := a.listPieces(0, "", false, "")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	valued, err := a.valuedPieceIDs()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	for _, p := range pieces {
-		if !p.HasActive {
-			continue
-		}
-		data.BaselineTotal++
-		if valued[p.ID] {
-			data.BaselineDone++
-		} else {
-			data.Baseline = append(data.Baseline, p)
-		}
-	}
+// fillTodayPlan builds today's plan when the baseline is complete
+// and the day has a budget: sizes on the time still usable, drops
+// what overflows, and marks the day as budget-less otherwise.
+func (a *App) fillTodayPlan(data *todayData, avail []Availability, today string) error {
 	if len(data.Baseline) == 0 && data.HasAvailability && data.Budget > 0 {
 		items, _, err := a.buildPlan(today)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return err
 		}
 		scores := make([]float64, len(items))
 		for i := range items {
@@ -838,8 +802,7 @@ func (a *App) handleToday(w http.ResponseWriter, r *http.Request) {
 		if remaining > 0 {
 			items, err = a.autoSkipOverflow(items, remaining, autoSkipGraceMin, today)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+				return err
 			}
 		}
 		data.Items = items
@@ -853,49 +816,53 @@ func (a *App) handleToday(w http.ResponseWriter, r *http.Request) {
 	} else if data.HasAvailability {
 		data.NoBudget = true
 	}
-	data.Pieces = pieces
-	// Preparation dots on plan pieces, extra pieces, baseline pieces
-	// and audition chips.
-	{
-		tmp := make([]Piece, 0, len(data.Items)+len(data.ExtraDone)+len(data.Baseline))
-		for _, it := range data.Items {
-			tmp = append(tmp, it.Piece)
-		}
-		for _, e := range data.ExtraDone {
-			tmp = append(tmp, e.P)
-		}
-		for _, p := range data.Baseline {
-			tmp = append(tmp, p)
-		}
-		if err := a.stampPrepLevels(tmp); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		k := 0
-		for i := range data.Items {
-			stamped := tmp[k]
-			k++
-			data.Items[i].Piece = stamped
-			for ui := range data.Items[i].Upcoming {
-				for _, c := range stamped.Auditions {
-					if c.ID == data.Items[i].Upcoming[ui].ID {
-						data.Items[i].Upcoming[ui].Level = c.Level
-						data.Items[i].Upcoming[ui].Prep = c.Prep
-					}
+	return nil
+}
+
+// stampTodayLevels stamps preparation levels on the plan pieces
+// and the baseline pieces of the home page, and mirrors the levels
+// onto the audition chips of the plan items.
+func (a *App) stampTodayLevels(data *todayData) error {
+	tmp := make([]Piece, 0, len(data.Items)+len(data.ExtraDone)+len(data.Baseline))
+	for _, it := range data.Items {
+		tmp = append(tmp, it.Piece)
+	}
+	for _, e := range data.ExtraDone {
+		tmp = append(tmp, e.P)
+	}
+	tmp = append(tmp, data.Baseline...)
+	if err := a.stampPrepLevels(tmp); err != nil {
+		return err
+	}
+	k := 0
+	for i := range data.Items {
+		stamped := tmp[k]
+		k++
+		data.Items[i].Piece = stamped
+		for ui := range data.Items[i].Upcoming {
+			for _, c := range stamped.Auditions {
+				if c.ID == data.Items[i].Upcoming[ui].ID {
+					data.Items[i].Upcoming[ui].Level = c.Level
+					data.Items[i].Upcoming[ui].Prep = c.Prep
 				}
 			}
 		}
-		for i := range data.ExtraDone {
-			data.ExtraDone[i].P = tmp[k]
-			k++
-		}
-		for i := range data.Baseline {
-			data.Baseline[i] = tmp[k]
-			k++
-		}
 	}
-	// Pieces practiced today outside the plan (recorded by hand) join
-	// the hero count and the Completati list.
+	for i := range data.ExtraDone {
+		data.ExtraDone[i].P = tmp[k]
+		k++
+	}
+	for i := range data.Baseline {
+		data.Baseline[i] = tmp[k]
+		k++
+	}
+	return nil
+}
+
+// todayExtraDone appends the pieces practiced today outside the
+// plan to the completions of the home page. It returns the pieces
+// by ID for the sections that follow.
+func (a *App) todayExtraDone(data *todayData, pieces []Piece, today string) (map[int64]Piece, error) {
 	inPlan := make(map[int64]bool, len(data.Items))
 	for _, it := range data.Items {
 		inPlan[it.Piece.ID] = true
@@ -908,16 +875,14 @@ func (a *App) handleToday(w http.ResponseWriter, r *http.Request) {
 		FROM sessions WHERE date = ? AND minutes > 0
 		GROUP BY piece_id ORDER BY piece_id`, today)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 	defer closeRowsLogged(xrows)
 	for xrows.Next() {
 		var pid int64
 		var mins int
-		if err := xrows.Scan(&pid, &mins); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		if err = xrows.Scan(&pid, &mins); err != nil {
+			return nil, err
 		}
 		if inPlan[pid] {
 			continue
@@ -929,38 +894,34 @@ func (a *App) handleToday(w http.ResponseWriter, r *http.Request) {
 		data.ExtraDone = append(data.ExtraDone, doneEntry{P: p, Logged: mins})
 		data.DoneCount++
 	}
-	if err := xrows.Err(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	if err = xrows.Err(); err != nil {
+		return nil, err
 	}
-	// Pieces skipped today get their own section: explicit skips from
-	// the plan cards and pieces the plan itself dropped when time ran
-	// out. Anything already shown today stays out: an auto-skipped
-	// piece may be back in the plan after new availability, and a
-	// practiced one is among the Completati.
-	shown := make(map[int64]bool, len(data.Items)+len(data.ExtraDone))
-	for _, it := range data.Items {
-		shown[it.Piece.ID] = true
-	}
-	for _, e := range data.ExtraDone {
-		shown[e.P.ID] = true
-	}
+	return byID, nil
+}
+
+// todaySkipped fills the skipped section of the home page:
+// explicit skips from the plan cards and pieces the plan itself
+// dropped when time ran out, minus anything already shown today.
+
+// skipMarkersToday reads today's skip markers by piece: true for
+// plan-generated auto skips, false for explicit ones. An explicit
+// skip wins over the plan's marker for the same piece.
+func (a *App) skipMarkersToday(today string) (map[int64]bool, error) {
 	srows, err := a.db.Query(`SELECT piece_id, note FROM sessions
 		WHERE date = ? AND note IN ('skipped', 'postponed', 'auto-skipped')`, today)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 	defer closeRowsLogged(srows)
 	auto := map[int64]bool{}
 	for srows.Next() {
 		var pid int64
 		var note string
-		if err := srows.Scan(&pid, &note); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		if err = srows.Scan(&pid, &note); err != nil {
+			return nil, err
 		}
-		if note == "auto-skipped" {
+		if note == noteAutoSkipped {
 			if _, seen := auto[pid]; !seen {
 				auto[pid] = true
 			}
@@ -968,9 +929,23 @@ func (a *App) handleToday(w http.ResponseWriter, r *http.Request) {
 			auto[pid] = false // an explicit skip wins over the plan's marker
 		}
 	}
-	if err := srows.Err(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	if err = srows.Err(); err != nil {
+		return nil, err
+	}
+	return auto, nil
+}
+
+func (a *App) todaySkipped(data *todayData, byID map[int64]Piece, today string) error {
+	shown := make(map[int64]bool, len(data.Items)+len(data.ExtraDone))
+	for _, it := range data.Items {
+		shown[it.Piece.ID] = true
+	}
+	for _, e := range data.ExtraDone {
+		shown[e.P.ID] = true
+	}
+	auto, err := a.skipMarkersToday(today)
+	if err != nil {
+		return err
 	}
 	for pid, isAuto := range auto {
 		if shown[pid] {
@@ -996,13 +971,89 @@ func (a *App) handleToday(w http.ResponseWriter, r *http.Request) {
 		for i, e := range data.Skipped {
 			tmp[i] = e.P
 		}
-		if err := a.stampPrepLevels(tmp); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		if err = a.stampPrepLevels(tmp); err != nil {
+			return err
 		}
 		for i := range data.Skipped {
 			data.Skipped[i].P = tmp[i]
 		}
+	}
+	return nil
+}
+
+// fillBaseline splits the active pieces into the ones that carry
+// a confidence rating and the ones still waiting for one.
+func fillBaseline(data *todayData, pieces []Piece, valued map[int64]bool) {
+	for _, p := range pieces {
+		if !p.HasActive {
+			continue
+		}
+		data.BaselineTotal++
+		if valued[p.ID] {
+			data.BaselineDone++
+		} else {
+			data.Baseline = append(data.Baseline, p)
+		}
+	}
+}
+
+func (a *App) handleToday(w http.ResponseWriter, r *http.Request) {
+	today := todayStr()
+	avail, err := a.availabilityFor(today)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	data := todayData{Title: tr(langFor(r), "nav.today"), Nav: "today", Date: today, HasAvailability: len(avail) > 0}
+	for _, v := range avail {
+		if v.Kind == "busy" {
+			data.Busy = append(data.Busy, v)
+		} else {
+			data.Free = append(data.Free, v)
+			data.Budget += v.EndMin - v.StartMin
+		}
+	}
+	var logged int
+	if err = a.db.QueryRow(`SELECT COALESCE(SUM(minutes), 0) FROM sessions WHERE date=?`, today).Scan(&logged); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	data.Logged = logged
+	if data.Budget > 0 {
+		data.LoggedPct = logged * 100 / data.Budget
+		data.BudgetPct = data.LoggedPct
+		if data.BudgetPct > 100 {
+			data.BudgetPct = 100
+		}
+	}
+	pieces, err := a.listPieces(0, "", false, "")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	valued, err := a.valuedPieceIDs()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	fillBaseline(&data, pieces, valued)
+	if err = a.fillTodayPlan(&data, avail, today); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	data.Pieces = pieces
+	if err = a.stampTodayLevels(&data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	byID, err := a.todayExtraDone(&data, pieces, today)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err = a.todaySkipped(&data, byID, today); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	data.PlanTotal = len(data.Items) + len(data.ExtraDone)
 	data.Readiness, err = a.auditionReadiness(today, pieces, langFor(r))
@@ -1081,7 +1132,11 @@ func (a *App) handleSession(w http.ResponseWriter, r *http.Request) {
 	// A piece that was practiced after all is not skipped: logging
 	// real minutes on it clears any skip marker it carries today.
 	if minutes > 0 {
-		savedID, _ := res.LastInsertId()
+		savedID, err := res.LastInsertId()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		if _, err := a.db.Exec(`DELETE FROM sessions
 			WHERE date=? AND piece_id=? AND id<>? AND note IN ('skipped','postponed','auto-skipped')`,
 			todayStr(), pieceID, savedID); err != nil {
@@ -1150,7 +1205,7 @@ func (a *App) handlePieces(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, r, "pieces.html", piecesData{
-		Title: tr(langFor(r), "nav.pieces"), Nav: "pieces", Pieces: pieces, Auditions: auditions,
+		Title: tr(langFor(r), "nav.pieces"), Nav: navPieces, Pieces: pieces, Auditions: auditions,
 		FilterAudition: auditionID, FilterKind: kind, Search: search, ShowArchived: showArchived,
 		Query: r.URL.RawQuery,
 	})
@@ -1282,7 +1337,7 @@ func (a *App) handleEditPiece(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a.render(w, r, "piece_form.html", pieceFormData{
-		Title: tr(langFor(r), "piece.edit_title"), Nav: "pieces", Piece: p, Auditions: auditions,
+		Title: tr(langFor(r), "piece.edit_title"), Nav: navPieces, Piece: p, Auditions: auditions,
 		Selected: sel, Excerpt: excerpts, Rounds: rounds, SelRound: selRound,
 	})
 }
@@ -1444,11 +1499,11 @@ func (a *App) handleAuditions(w http.ResponseWriter, r *http.Request) {
 	var rows []auditionRow
 	for _, c := range cs {
 		var n, nl int
-		if err := a.db.QueryRow(`SELECT COUNT(*) FROM piece_audition WHERE audition_id=?`, c.ID).Scan(&n); err != nil {
+		if err = a.db.QueryRow(`SELECT COUNT(*) FROM piece_audition WHERE audition_id=?`, c.ID).Scan(&n); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if err := a.db.QueryRow(`SELECT COUNT(*) FROM audition_links WHERE audition_id=?`, c.ID).Scan(&nl); err != nil {
+		if err = a.db.QueryRow(`SELECT COUNT(*) FROM audition_links WHERE audition_id=?`, c.ID).Scan(&nl); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -1468,7 +1523,7 @@ func (a *App) handleAuditions(w http.ResponseWriter, r *http.Request) {
 		rows[i].Level = levels[rows[i].ID]
 		rows[i].Prep = means[rows[i].ID]
 	}
-	a.render(w, r, "auditions.html", auditionsData{Title: tr(langFor(r), "nav.auditions"), Nav: "auditions", Rows: rows, Today: today})
+	a.render(w, r, "auditions.html", auditionsData{Title: tr(langFor(r), "nav.auditions"), Nav: navAuditions, Rows: rows, Today: today})
 }
 
 func validWeight(n int) int {
@@ -1627,14 +1682,14 @@ func (a *App) handleAuditionDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := a.stampPrepLevels(pieces); err != nil {
+	if err = a.stampPrepLevels(pieces); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	{
-		levels, means, err := a.auditionPrepStats()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		levels, means, statsErr := a.auditionPrepStats()
+		if statsErr != nil {
+			http.Error(w, statsErr.Error(), http.StatusInternalServerError)
 			return
 		}
 		c.Level = levels[c.ID]
@@ -1659,7 +1714,7 @@ func (a *App) handleAuditionDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	stampMockMeans(mocks, langFor(r))
 	a.render(w, r, "audition_detail.html", auditionDetailData{
-		Title: c.Name, Nav: "auditions", Audition: c,
+		Title: c.Name, Nav: navAuditions, Audition: c,
 		Concluded: !c.Archived && c.Date < todayStr(),
 		Links:     links, Pieces: pieces,
 		PrepMap: prep, PrepMapMobile: prepMobile, Mocks: mocks,
@@ -1692,7 +1747,7 @@ func (a *App) handleAuditionEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, r, "audition_form.html", auditionFormData{
-		Title: tr(langFor(r), "audition.edit_title"), Nav: "auditions", Audition: c, Links: links, Rounds: rounds,
+		Title: tr(langFor(r), "audition.edit_title"), Nav: navAuditions, Audition: c, Links: links, Rounds: rounds,
 	})
 }
 
@@ -1920,104 +1975,62 @@ type dayData struct {
 }
 
 // handleDiaryDay shows one day with every piece that concerns it.
-func (a *App) handleDiaryDay(w http.ResponseWriter, r *http.Request) {
-	date := r.PathValue("date")
-	if _, err := time.Parse("2006-01-02", date); err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	tiles, err := a.prepTiles(todayStr(), prepBiasDesktop, langFor(r))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	pieceLevel := make(map[int64]int, len(tiles))
-	piecePrep := make(map[int64]float64, len(tiles))
-	for _, t := range tiles {
-		pieceLevel[t.PieceID] = t.Level
-		piecePrep[t.PieceID] = t.Prep
-	}
-	rows, ok := a.queryRows(w, `SELECT s.id, s.date, s.piece_id, s.minutes, s.confidence, s.note, s.bpm,
-		p.id, p.composer, p.work, p.movement
-		FROM sessions s JOIN pieces p ON p.id = s.piece_id
-		WHERE s.date = ? ORDER BY p.composer, p.work, s.id`, date)
-	if !ok {
-		return
-	}
-	defer closeRowsLogged(rows)
-	data := dayData{Title: tr(langFor(r), "nav.diary"), Nav: "diary", Date: date}
+
+// scanDiaryDay groups the session rows of one day by piece and
+// classifies each piece: practiced, explicitly skipped, auto
+// skipped, or present with real sessions.
+func scanDiaryDay(rows *sql.Rows, pieceLevel map[int64]int, piecePrep map[int64]float64) (entries []dayPiece, minutes, practiced int, skipAuto, hasReal map[int64]bool, err error) {
 	byKey := map[int64]int{}
 	counted := map[int64]bool{}
-	skipAuto := map[int64]bool{}
-	hasReal := map[int64]bool{}
+	skipAuto = map[int64]bool{}
+	hasReal = map[int64]bool{}
 	for rows.Next() {
 		var s Session
 		var pid int64
 		var composer, work, movement string
 		if err := rows.Scan(&s.ID, &s.Date, &s.PieceID, &s.Minutes, &s.Confidence, &s.Note, &s.BPM,
 			&pid, &composer, &work, &movement); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return nil, 0, 0, nil, nil, err
 		}
 		idx, seen := byKey[s.PieceID]
 		if !seen {
 			title := composer + " — " + work
-			data.Entries = append(data.Entries, dayPiece{PieceID: s.PieceID, Title: title, Movement: movement, Level: pieceLevel[s.PieceID], Prep: piecePrep[s.PieceID]})
-			idx = len(data.Entries) - 1
+			entries = append(entries, dayPiece{PieceID: s.PieceID, Title: title, Movement: movement, Level: pieceLevel[s.PieceID], Prep: piecePrep[s.PieceID]})
+			idx = len(entries) - 1
 			byKey[s.PieceID] = idx
 		}
 		if s.Minutes > 0 && !counted[s.PieceID] {
 			counted[s.PieceID] = true
-			data.Practiced++
+			practiced++
 		}
 		switch s.Note {
 		case "skipped", "postponed":
 			skipAuto[s.PieceID] = false // an explicit skip wins over the plan's marker
-		case "auto-skipped":
+		case noteAutoSkipped:
 			if _, seen := skipAuto[s.PieceID]; !seen {
 				skipAuto[s.PieceID] = true
 			}
 		default:
 			hasReal[s.PieceID] = true
 		}
-		data.Entries[idx].Sessions = append(data.Entries[idx].Sessions, s)
-		data.Entries[idx].Minutes += s.Minutes
-		data.Minutes += s.Minutes
+		entries[idx].Sessions = append(entries[idx].Sessions, s)
+		entries[idx].Minutes += s.Minutes
+		minutes += s.Minutes
 	}
 	if err := rows.Err(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, 0, 0, nil, nil, err
 	}
-	// An auto-skip marker on a piece that was practiced after all is
-	// stale: the plan dropped it, then it came back and got its
-	// minutes. Showing it next to the session reads as a contradiction,
-	// so practiced entries drop the marker line. A manual skip stays:
-	// that was a deliberate act, and the diary keeps it.
-	for i := range data.Entries {
-		if data.Entries[i].Minutes == 0 {
-			continue
-		}
-		kept := data.Entries[i].Sessions[:0]
-		for _, s := range data.Entries[i].Sessions {
-			if s.Note != "auto-skipped" {
-				kept = append(kept, s)
-			}
-		}
-		data.Entries[i].Sessions = kept
-	}
-	// Pieces whose only trace that day is a skip marker leave the diary
-	// entries and get the same card the homepage Saltati section uses.
-	skippedIDs := map[int64]bool{}
-	for pid, isAuto := range skipAuto {
-		if !hasReal[pid] {
-			skippedIDs[pid] = isAuto
-		}
-	}
+	return entries, minutes, practiced, skipAuto, hasReal, nil
+}
+
+// attachSkippedCards moves the pieces whose only trace that day
+// is a skip marker out of the entries and into the skipped cards,
+// the same cards the homepage Saltati section uses.
+func (a *App) attachSkippedCards(data *dayData, skippedIDs map[int64]bool) error {
 	if len(skippedIDs) > 0 {
 		pieces, err := a.listPieces(0, "", false, "")
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return err
 		}
 		byID := make(map[int64]Piece, len(pieces))
 		for _, p := range pieces {
@@ -2056,13 +2069,76 @@ func (a *App) handleDiaryDay(w http.ResponseWriter, r *http.Request) {
 				tmp[i] = e.P
 			}
 			if err := a.stampPrepLevels(tmp); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+				return err
 			}
 			for i := range data.Skipped {
 				data.Skipped[i].P = tmp[i]
 			}
 		}
+	}
+	return nil
+}
+
+func (a *App) handleDiaryDay(w http.ResponseWriter, r *http.Request) {
+	date := r.PathValue("date")
+	if _, err := time.Parse("2006-01-02", date); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	tiles, err := a.prepTiles(todayStr(), prepBiasDesktop, langFor(r))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	pieceLevel := make(map[int64]int, len(tiles))
+	piecePrep := make(map[int64]float64, len(tiles))
+	for _, t := range tiles {
+		pieceLevel[t.PieceID] = t.Level
+		piecePrep[t.PieceID] = t.Prep
+	}
+	rows, ok := a.queryRows(w, `SELECT s.id, s.date, s.piece_id, s.minutes, s.confidence, s.note, s.bpm,
+		p.id, p.composer, p.work, p.movement
+		FROM sessions s JOIN pieces p ON p.id = s.piece_id
+		WHERE s.date = ? ORDER BY p.composer, p.work, s.id`, date)
+	if !ok {
+		return
+	}
+	defer closeRowsLogged(rows)
+	data := dayData{Title: tr(langFor(r), "nav.diary"), Nav: "diary", Date: date}
+	entries, minutes, practiced, skipAuto, hasReal, serr := scanDiaryDay(rows, pieceLevel, piecePrep)
+	if serr != nil {
+		http.Error(w, serr.Error(), http.StatusInternalServerError)
+		return
+	}
+	data.Entries, data.Minutes, data.Practiced = entries, minutes, practiced
+	// An auto-skip marker on a piece that was practiced after all is
+	// stale: the plan dropped it, then it came back and got its
+	// minutes. Showing it next to the session reads as a contradiction,
+	// so practiced entries drop the marker line. A manual skip stays:
+	// that was a deliberate act, and the diary keeps it.
+	for i := range data.Entries {
+		if data.Entries[i].Minutes == 0 {
+			continue
+		}
+		kept := data.Entries[i].Sessions[:0]
+		for _, s := range data.Entries[i].Sessions {
+			if s.Note != noteAutoSkipped {
+				kept = append(kept, s)
+			}
+		}
+		data.Entries[i].Sessions = kept
+	}
+	// Pieces whose only trace that day is a skip marker leave the diary
+	// entries and get the same card the homepage Saltati section uses.
+	skippedIDs := map[int64]bool{}
+	for pid, isAuto := range skipAuto {
+		if !hasReal[pid] {
+			skippedIDs[pid] = isAuto
+		}
+	}
+	if err := a.attachSkippedCards(&data, skippedIDs); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	a.render(w, r, "day.html", data)
 }
@@ -2165,6 +2241,55 @@ func buildSparkline(pts []confPoint) sparkline {
 	return s
 }
 
+// pieceScore assembles the score panel of a piece page: today's
+// plan entry, the skip state, the rank among today's candidates,
+// and the entry forecast when the piece is out of the top 8. On a
+// data error the helper writes the response and reports false.
+func (a *App) pieceScore(w http.ResponseWriter, r *http.Request, p Piece, item planItem, hasScore bool, today string) (pezzoScore, bool) {
+	score := pezzoScore{HasUpcoming: hasScore}
+	if hasScore {
+		score.planItem = item
+		mark, markErr := a.todayMark(p.ID, today)
+		if markErr != nil {
+			http.Error(w, markErr.Error(), http.StatusInternalServerError)
+			return pezzoScore{}, false
+		}
+		score.Skipped = mark.Skipped
+		if !mark.Skipped {
+			items, _, planErr := a.buildPlan(today)
+			if planErr != nil {
+				http.Error(w, planErr.Error(), http.StatusInternalServerError)
+				return pezzoScore{}, false
+			}
+			score.Candidates = len(items)
+			for i, it := range items {
+				if it.Piece.ID == p.ID {
+					score.Rank = i + 1
+					score.InTop = score.Rank <= 8
+					break
+				}
+			}
+		}
+		if !score.InTop {
+			fc, ferr := a.newPlanForecaster(today)
+			if ferr == nil {
+				fc.lang = langFor(r)
+			}
+			if ferr != nil {
+				http.Error(w, ferr.Error(), http.StatusInternalServerError)
+				return pezzoScore{}, false
+			}
+			fDate, fScore, fWhy, eerr := fc.entryDate(p.ID, today)
+			if eerr != nil {
+				http.Error(w, eerr.Error(), http.StatusInternalServerError)
+				return pezzoScore{}, false
+			}
+			score.ForecastDate, score.ForecastScore, score.ForecastWhy = fDate, fScore, fWhy
+		}
+	}
+	return score, true
+}
+
 func (a *App) handlePieceDetail(w http.ResponseWriter, r *http.Request) {
 	p, ok := a.pieceOr404(w, r)
 	if !ok {
@@ -2206,46 +2331,9 @@ func (a *App) handlePieceDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	score := pezzoScore{HasUpcoming: hasScore}
-	if hasScore {
-		score.planItem = item
-		mark, err := a.todayMark(p.ID, today)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		score.Skipped = mark.Skipped
-		if !mark.Skipped {
-			items, _, err := a.buildPlan(today)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			score.Candidates = len(items)
-			for i, it := range items {
-				if it.Piece.ID == p.ID {
-					score.Rank = i + 1
-					score.InTop = score.Rank <= 8
-					break
-				}
-			}
-		}
-		if !score.InTop {
-			fc, err := a.newPlanForecaster(today)
-			if err == nil {
-				fc.lang = langFor(r)
-			}
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			fDate, fScore, fWhy, err := fc.entryDate(p.ID, today)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			score.ForecastDate, score.ForecastScore, score.ForecastWhy = fDate, fScore, fWhy
-		}
+	score, ok := a.pieceScore(w, r, p, item, hasScore, today)
+	if !ok {
+		return
 	}
 	recs, err := a.pieceRecordings(p.ID)
 	if err != nil {
@@ -2262,11 +2350,11 @@ func (a *App) handlePieceDetail(w http.ResponseWriter, r *http.Request) {
 	var tempo tempoChart
 	tempoLatest := 0
 	if len(tps) > 0 {
-		tempo = buildTempoChart(tps, int(p.TargetBPM.Int64), p.TargetBPM.Valid, langFor(r))
+		tempo = buildTempoChart(tps, int(p.TargetBPM.Int64), p.TargetBPM.Valid)
 		tempoLatest = tps[len(tps)-1].BPM
 	}
 	a.render(w, r, "piece_detail.html", pieceDetailData{
-		Title: p.Composer + " — " + p.Work, Nav: "pieces", Piece: p, Sessions: sessions, Spark: buildSparkline(cps), Score: score,
+		Title: p.Composer + " — " + p.Work, Nav: navPieces, Piece: p, Sessions: sessions, Spark: buildSparkline(cps), Score: score,
 		Recordings: recordingRows(recs), RecorderDate: recorderDate,
 		Tempo: tempo, HasTempo: len(tps) > 0, TempoLatest: tempoLatest,
 	})

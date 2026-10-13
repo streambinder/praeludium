@@ -18,7 +18,7 @@ func TestAutoSkipDoesNotExcludeFromPlan(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := migrate(db); err != nil {
+	if err = migrate(db); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
 	today := todayStr()
@@ -29,7 +29,7 @@ func TestAutoSkipDoesNotExcludeFromPlan(t *testing.T) {
 		`INSERT INTO piece_audition(piece_id, audition_id) VALUES(1, 1)`,
 	}
 	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
+		if _, err = db.Exec(s); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -51,7 +51,7 @@ func TestAutoSkipDoesNotExcludeFromPlan(t *testing.T) {
 		t.Fatalf("overflow with no time left: want 0 kept, got %d", len(kept))
 	}
 	var note string
-	if err := db.QueryRow(`SELECT note FROM sessions WHERE piece_id=1`).Scan(&note); err != nil {
+	if err = db.QueryRow(`SELECT note FROM sessions WHERE piece_id=1`).Scan(&note); err != nil {
 		t.Fatal(err)
 	}
 	if note != "auto-skipped" {
@@ -69,11 +69,11 @@ func TestAutoSkipDoesNotExcludeFromPlan(t *testing.T) {
 
 	// A second overflow writes no duplicate marker.
 	items[0].Minutes = 30
-	if _, err := a.autoSkipOverflow(items, 0, 0, today); err != nil {
+	if _, err = a.autoSkipOverflow(items, 0, 0, today); err != nil {
 		t.Fatal(err)
 	}
 	var n int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE piece_id=1 AND note='auto-skipped'`).Scan(&n); err != nil {
+	if err = db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE piece_id=1 AND note='auto-skipped'`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 1 {
@@ -81,7 +81,7 @@ func TestAutoSkipDoesNotExcludeFromPlan(t *testing.T) {
 	}
 
 	// A manual skip, instead, excludes the piece for the whole day.
-	if _, err := db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence, note)
+	if _, err = db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence, note)
 		VALUES(?,1,0,0,'skipped')`, today); err != nil {
 		t.Fatal(err)
 	}

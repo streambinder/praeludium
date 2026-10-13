@@ -26,17 +26,17 @@ func TestConcorsoLinksCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := migrate(db); err != nil {
+	if err = migrate(db); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
-	if _, err := db.Exec(`INSERT INTO auditions(id, name, audition_date, weight) VALUES(1, 'Roma', '2026-11-23', 3)`); err != nil {
+	if _, err = db.Exec(`INSERT INTO auditions(id, name, audition_date, weight) VALUES(1, 'Roma', '2026-11-23', 3)`); err != nil {
 		t.Fatal(err)
 	}
 	a := &App{db: db}
-	if err := a.addConcorsoLink(1, "Bando", "https://example.org/bando.pdf"); err != nil {
+	if err = a.addConcorsoLink(1, "Bando", "https://example.org/bando.pdf"); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.addConcorsoLink(1, "Parti", "https://example.org/parti.pdf"); err != nil {
+	if err = a.addConcorsoLink(1, "Parti", "https://example.org/parti.pdf"); err != nil {
 		t.Fatal(err)
 	}
 	links, err := a.concorsoLinks(1)
@@ -46,7 +46,7 @@ func TestConcorsoLinksCRUD(t *testing.T) {
 	if len(links) != 2 || links[0].Label != "Bando" || links[1].Label != "Parti" {
 		t.Fatalf("want 2 ordered links, got %+v", links)
 	}
-	if err := a.deleteConcorsoLink(1, links[0].ID); err != nil {
+	if err = a.deleteConcorsoLink(1, links[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	links, err = a.concorsoLinks(1)
@@ -57,14 +57,18 @@ func TestConcorsoLinksCRUD(t *testing.T) {
 		t.Fatalf("want only Parti left, got %+v", links)
 	}
 	// Deleting through another audition must not touch the link.
-	if err := a.addConcorsoLink(1, "Extra", "https://example.org/x"); err != nil {
+	if err = a.addConcorsoLink(1, "Extra", "https://example.org/x"); err != nil {
 		t.Fatal(err)
 	}
-	links, _ = a.concorsoLinks(1)
-	if err := a.deleteConcorsoLink(2, links[0].ID); err != nil {
+	if links, err = a.concorsoLinks(1); err != nil {
 		t.Fatal(err)
 	}
-	links, _ = a.concorsoLinks(1)
+	if err = a.deleteConcorsoLink(2, links[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if links, err = a.concorsoLinks(1); err != nil {
+		t.Fatal(err)
+	}
 	if len(links) != 2 {
 		t.Fatalf("cross-audition delete leaked: %+v", links)
 	}

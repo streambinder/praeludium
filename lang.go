@@ -82,7 +82,7 @@ func langChoice(r *http.Request) string {
 // cookie; "auto" clears it and returns to detection.
 func (a *App) handleSetLanguage(w http.ResponseWriter, r *http.Request) {
 	choice := r.FormValue("lang")
-	cookie := &http.Cookie{Name: "lang", Path: "/", SameSite: http.SameSiteLaxMode}
+	cookie := &http.Cookie{Name: "lang", Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}
 	switch {
 	case choice == "auto":
 		cookie.MaxAge = -1

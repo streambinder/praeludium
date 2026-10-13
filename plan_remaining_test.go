@@ -40,7 +40,7 @@ func TestAutoSkipGraceBuffer(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := migrate(db); err != nil {
+	if err = migrate(db); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
 	today := todayStr()
@@ -51,7 +51,7 @@ func TestAutoSkipGraceBuffer(t *testing.T) {
 		`INSERT INTO piece_audition(piece_id, audition_id) VALUES(1, 1)`,
 	}
 	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
+		if _, err = db.Exec(s); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -74,7 +74,7 @@ func TestAutoSkipGraceBuffer(t *testing.T) {
 		t.Fatalf("within grace: want 1 kept, got %d", len(kept))
 	}
 	var n int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE note='auto-skipped'`).Scan(&n); err != nil {
+	if err = db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE note='auto-skipped'`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 0 {

@@ -86,7 +86,7 @@ func TestDiaryStatsAndRender(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := migrate(db); err != nil {
+	if err = migrate(db); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
 	stmts := []string{
@@ -100,7 +100,7 @@ func TestDiaryStatsAndRender(t *testing.T) {
 		`INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES('2026-09-14', 3, 0, 3)`,
 	}
 	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
+		if _, err = db.Exec(s); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
@@ -188,10 +188,13 @@ func TestDiaryStatsAuditionsCoverageConf(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := migrate(db); err != nil {
+	if err = migrate(db); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
-	today, _ := time.Parse("2006-01-02", todayStr())
+	today, err := time.Parse("2006-01-02", todayStr())
+	if err != nil {
+		t.Fatal(err)
+	}
 	recent := today.AddDate(0, 0, -3).Format("2006-01-02")
 	old := today.AddDate(0, 0, -30).Format("2006-01-02")
 	stmts := []string{
@@ -206,14 +209,14 @@ func TestDiaryStatsAuditionsCoverageConf(t *testing.T) {
 		`INSERT INTO piece_audition(piece_id, audition_id) VALUES(1, 3)`,
 	}
 	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
+		if _, err = db.Exec(s); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
-	if _, err := db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES(?, 1, 100, 4)`, recent); err != nil {
+	if _, err = db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES(?, 1, 100, 4)`, recent); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES(?, 2, 50, 2)`, old); err != nil {
+	if _, err = db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES(?, 2, 50, 2)`, old); err != nil {
 		t.Fatal(err)
 	}
 	a := &App{db: db}

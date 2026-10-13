@@ -146,7 +146,7 @@ func TestAutoSkipOverflowTrimsBottomFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := migrate(db); err != nil {
+	if err = migrate(db); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
 	for _, s := range []string{
@@ -154,7 +154,7 @@ func TestAutoSkipOverflowTrimsBottomFirst(t *testing.T) {
 		`INSERT INTO pieces(id, composer, work) VALUES(2, 'B', 'b')`,
 		`INSERT INTO pieces(id, composer, work) VALUES(3, 'C', 'c')`,
 	} {
-		if _, err := db.Exec(s); err != nil {
+		if _, err = db.Exec(s); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
@@ -172,7 +172,7 @@ func TestAutoSkipOverflowTrimsBottomFirst(t *testing.T) {
 		t.Fatalf("want pieces 1 and 2 to survive, got %+v", got)
 	}
 	var n int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE piece_id=3 AND note='auto-skipped'`).Scan(&n); err != nil {
+	if err = db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE piece_id=3 AND note='auto-skipped'`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 1 {
@@ -194,7 +194,7 @@ func TestConcorsoReadinessAveragesLinkedPieces(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := migrate(db); err != nil {
+	if err = migrate(db); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
 	stmts := []string{
@@ -209,7 +209,7 @@ func TestConcorsoReadinessAveragesLinkedPieces(t *testing.T) {
 		`INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES('2026-10-02', 1, 120, 5)`,
 	}
 	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
+		if _, err = db.Exec(s); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
