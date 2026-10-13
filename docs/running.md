@@ -24,4 +24,4 @@ The proxy must enforce HTTP Basic Auth.
 
 ## Local development
 
-Run `go run .` (Go 1.26 or later).
+Run `go run ./cmd/praeludium` (Go 1.26 or later).
