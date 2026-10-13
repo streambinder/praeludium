@@ -1833,6 +1833,23 @@ a:hover {
   flex-wrap: wrap;
 }
 
+.rec-meter {
+  width: 4.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: rgba(33, 28, 21, 0.12);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.rec-meter-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+
 .recorder audio,
 .rec-item audio {
   width: 100%;
