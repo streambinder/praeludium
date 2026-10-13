@@ -1,4 +1,4 @@
-module github.com/streambinder/studium
+module github.com/streambinder/praeludium
 
 go 1.26.0
 

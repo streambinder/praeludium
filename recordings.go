@@ -308,7 +308,7 @@ audio{width:100%}
 </head>
 <body>
 <main>
-<p>Studium</p>
+<p>Præludium</p>
 <h1>{{.Title}}</h1>
 <p>{{.Date}}</p>
 <audio controls preload="metadata" src="/share/{{.Token}}/audio"></audio>

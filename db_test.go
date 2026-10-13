@@ -27,7 +27,7 @@ func rawDB(t *testing.T, stmts ...string) *sql.DB {
 }
 
 func TestOpenDB(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "studium.db")
+	path := filepath.Join(t.TempDir(), "praeludium.db")
 	db, err := openDB(path)
 	if err != nil {
 		t.Fatalf("openDB: %v", err)
@@ -42,7 +42,7 @@ func TestOpenDB(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := openDB(filepath.Join(t.TempDir(), "missing", "studium.db")); err == nil {
+	if _, err := openDB(filepath.Join(t.TempDir(), "missing", "praeludium.db")); err == nil {
 		t.Error("openDB in a missing directory: want error")
 	}
 	dir := t.TempDir()
@@ -131,7 +131,7 @@ func TestEnsureLinkExcerptVariants(t *testing.T) {
 }
 
 func TestMigrateOnReadOnlyAndClosedDB(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "studium.db")
+	path := filepath.Join(t.TempDir(), "praeludium.db")
 	db, err := openDB(path)
 	if err != nil {
 		t.Fatal(err)

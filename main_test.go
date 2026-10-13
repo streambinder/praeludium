@@ -11,16 +11,16 @@ import (
 )
 
 func TestLoadConfig(t *testing.T) {
-	t.Setenv("STUDIUM_DATA_DIR", "")
+	t.Setenv("PRAELUDIUM_DATA_DIR", "")
 	t.Setenv("PORT", "")
 	cfg := loadConfig()
 	if cfg.DataDir != "/data" || cfg.Port != "8080" {
 		t.Fatalf("defaults: got %+v", cfg)
 	}
-	t.Setenv("STUDIUM_DATA_DIR", "/tmp/studium-data")
+	t.Setenv("PRAELUDIUM_DATA_DIR", "/tmp/praeludium-data")
 	t.Setenv("PORT", "9090")
 	cfg = loadConfig()
-	if cfg.DataDir != "/tmp/studium-data" || cfg.Port != "9090" {
+	if cfg.DataDir != "/tmp/praeludium-data" || cfg.Port != "9090" {
 		t.Fatalf("from env: got %+v", cfg)
 	}
 }
@@ -78,7 +78,7 @@ func TestRunErrors(t *testing.T) {
 	}
 	// The database path is a directory: the database cannot be opened.
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, "studium.db"), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, "praeludium.db"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := run(Config{DataDir: dir, Port: "8080"}); err == nil {

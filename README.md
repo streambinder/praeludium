@@ -1,14 +1,14 @@
-# studium
+# præludium
 
 Diario di studio giornaliero per chi prepara concorsi d'orchestra: ogni giorno calcola cosa studiare con una formula spiegabile, traccia minuti e confidenza per pezzo, e tiene lo storico.
 
 ## Esecuzione con Docker
 
 ```sh
-docker build -t studium .
-docker run -d --name studium -p 127.0.0.1:8080:8080 \
-  -v studium-data:/data \
-  ghcr.io/streambinder/studium:latest
+docker build -t praeludium .
+docker run -d --name praeludium -p 127.0.0.1:8080:8080 \
+  -v praeludium-data:/data \
+  ghcr.io/streambinder/praeludium:latest
 ```
 
 Poi apri <http://localhost:8080>. L'app non fa autenticazione: in produzione va
@@ -18,7 +18,7 @@ Variabili d'ambiente:
 
 | variabile          | default  | descrizione                   |
 | ------------------ | -------- | ----------------------------- |
-| `STUDIUM_DATA_DIR` | `/data`  | directory del database SQLite |
+| `PRAELUDIUM_DATA_DIR` | `/data`  | directory del database SQLite |
 | `PORT`             | `8080`   | porta HTTP                    |
 
 Sviluppo locale: `go run .` (richiede Go 1.25+).
