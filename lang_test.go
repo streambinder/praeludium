@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -33,8 +32,7 @@ func TestAcceptLanguageParsing(t *testing.T) {
 	}
 }
 
-// Resolution order: cookie, then Accept-Language, then the
-// country of the origin IP, then English.
+// Resolution order: cookie, then Accept-Language, then English.
 func TestLangForPriority(t *testing.T) {
 	req := func(headers map[string]string) *http.Request {
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -43,26 +41,25 @@ func TestLangForPriority(t *testing.T) {
 		}
 		return r
 	}
-	italianIP := map[string]string{"X-Forwarded-For": "151.99.1.1"}
-	// Cookie wins over everything.
-	r := req(map[string]string{"Accept-Language": "en", "X-Forwarded-For": "151.99.1.1"})
+	// Cookie wins over the header.
+	r := req(map[string]string{"Accept-Language": "en"})
 	r.AddCookie(&http.Cookie{Name: "lang", Value: "de"})
 	if got := langFor(r); got != "de" {
 		t.Errorf("cookie: want de, got %q", got)
 	}
-	// Header wins over the IP country.
-	r = req(map[string]string{"Accept-Language": "fr", "X-Forwarded-For": "151.99.1.1"})
+	// The header speaks when no cookie is set.
+	r = req(map[string]string{"Accept-Language": "fr"})
 	if got := langFor(r); got != "fr" {
-		t.Errorf("header over IP: want fr, got %q", got)
+		t.Errorf("header: want fr, got %q", got)
 	}
-	// The IP speaks only when the header names no supported language.
+	// A header with no supported language falls back to English:
+	// the origin IP plays no role in the choice.
 	r = req(map[string]string{"Accept-Language": "ja", "X-Forwarded-For": "151.99.1.1"})
-	if got := langFor(r); got != "it" {
-		t.Errorf("IP fallback: want it, got %q", got)
+	if got := langFor(r); got != "en" {
+		t.Errorf("unsupported header: want en, got %q", got)
 	}
 	// No signals at all: English.
-	r = req(italianIP)
-	r.Header.Del("X-Forwarded-For")
+	r = req(map[string]string{})
 	if got := langFor(r); got != "en" {
 		t.Errorf("default: want en, got %q", got)
 	}
@@ -71,28 +68,6 @@ func TestLangForPriority(t *testing.T) {
 	r.AddCookie(&http.Cookie{Name: "lang", Value: "xx"})
 	if got := langFor(r); got != "es" {
 		t.Errorf("invalid cookie: want es, got %q", got)
-	}
-}
-
-func TestCountryLanguageLookup(t *testing.T) {
-	cases := map[string]string{
-		"151.99.1.1":   "it", // Telecom Italia
-		"217.70.184.1": "fr", // Gandi, France
-		"200.160.0.5":  "pt", // Brazil
-		"8.8.8.8":      "en", // Google, US
-	}
-	for ip, want := range cases {
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
-		r.Header.Set("X-Forwarded-For", ip)
-		if got := langFor(r); got != want {
-			t.Errorf("IP %s: want %q, got %q", ip, want, got)
-		}
-	}
-	// Private and loopback addresses never resolve a country.
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	r.Header.Set("X-Forwarded-For", "192.168.1.10, 10.0.0.4")
-	if got := langFor(r); got != "en" {
-		t.Errorf("private chain: want en, got %q", got)
 	}
 }
 
@@ -199,54 +174,5 @@ func TestLangChoiceAndSetLanguage(t *testing.T) {
 	}
 	if code, _, _ := covPost(t, mux, "/settings/language", url.Values{}); code != http.StatusBadRequest {
 		t.Errorf("set language missing: want 400, got %d", code)
-	}
-}
-
-func TestClientIPBranches(t *testing.T) {
-	build := func(xff, realIP, remote string) *http.Request {
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
-		if xff != "" {
-			r.Header.Set("X-Forwarded-For", xff)
-		}
-		if realIP != "" {
-			r.Header.Set("X-Real-IP", realIP)
-		}
-		r.RemoteAddr = remote
-		return r
-	}
-	cases := []struct {
-		name                string
-		xff, realIP, remote string
-		want                string
-	}{
-		{"xff first public", "8.8.8.8, 10.0.0.1", "", "192.168.1.1:80", "8.8.8.8"},
-		{"xff garbage then public", "garbage, 1.1.1.1", "", "192.168.1.1:80", "1.1.1.1"},
-		{"xff private only, real ip", "10.0.0.1", "9.9.9.9", "192.168.1.1:80", "9.9.9.9"},
-		{"real ip invalid, remote", "", "garbage", "9.9.9.9:1234", "9.9.9.9"},
-		{"remote without port", "", "", "9.9.9.9", "9.9.9.9"},
-		{"all private", "10.0.0.1", "192.168.0.2", "172.16.0.5:80", ""},
-		{"remote invalid", "", "", "garbage", ""},
-	}
-	for _, c := range cases {
-		ip := clientIP(build(c.xff, c.realIP, c.remote))
-		got := ""
-		if ip != nil {
-			got = ip.String()
-		}
-		if got != c.want {
-			t.Errorf("%s: want %q, got %q", c.name, c.want, got)
-		}
-	}
-	if got := countryLanguage(net.ParseIP("151.99.1.1")); got != "it" {
-		t.Errorf("countryLanguage italian IP: got %q", got)
-	}
-	if got := countryLanguage(net.ParseIP("127.0.0.1")); got != "" {
-		t.Errorf("countryLanguage loopback: want empty, got %q", got)
-	}
-	if got := countryLanguage(net.IP{1, 2, 3}); got != "" {
-		t.Errorf("countryLanguage malformed IP: want empty, got %q", got)
-	}
-	if got := countryLanguage(net.IP{}); got != "" {
-		t.Errorf("countryLanguage empty IP: want empty, got %q", got)
 	}
 }
