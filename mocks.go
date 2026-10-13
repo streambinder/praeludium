@@ -365,3 +365,10 @@ func (a *App) handleMockDelete(w http.ResponseWriter, r *http.Request) {
 	log.Printf("event mock deleted id=%d audition=%d", mockID, c.ID)
 	http.Redirect(w, r, "/auditions/"+strconv.FormatInt(c.ID, 10), http.StatusSeeOther)
 }
+
+// stampMockMeans fills the localized mean label used by list views.
+func stampMockMeans(mocks []Mock, lang string) {
+	for i := range mocks {
+		mocks[i].MeanText = decimal(lang, mocks[i].Mean)
+	}
+}

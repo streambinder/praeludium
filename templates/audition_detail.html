@@ -64,7 +64,7 @@
 </section>
 <section>
 <div class="section-head"><h2>{{t "mock.history"}}</h2><span class="meta">{{len .Mocks}}</span></div>
-<p><a class="btn" href="/auditions/{{.Audition.ID}}/mock">{{t "mock.start"}}</a></p>
+<p><a class="btn" href="/auditions/{{.Audition.ID}}/mock">{{t "mock.start"}}</a> <a class="btn secondary" href="/auditions/{{.Audition.ID}}/readiness">{{t "ready.title"}}</a></p>
 {{if .Mocks}}
 <div class="stack">
 {{range .Mocks}}

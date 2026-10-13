@@ -1864,3 +1864,9 @@ a:hover {
   display: grid;
   gap: 0.6rem;
 }
+
+.chart .target {
+  stroke: #7ea26d;
+  stroke-width: 1.5;
+  stroke-dasharray: 7 4;
+}

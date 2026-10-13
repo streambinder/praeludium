@@ -60,6 +60,7 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /auditions/{id}/mock/{mockID}", a.handleMockRun)
 	mux.HandleFunc("POST /auditions/{id}/mock/{mockID}/rate", a.handleMockRate)
 	mux.HandleFunc("POST /auditions/{id}/mock/{mockID}/delete", a.handleMockDelete)
+	mux.HandleFunc("GET /auditions/{id}/readiness", a.handleReadiness)
 	registerLegacyRedirects(mux)
 }
 
@@ -1656,9 +1657,7 @@ func (a *App) handleAuditionDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	for i := range mocks {
-		mocks[i].MeanText = decimal(langFor(r), mocks[i].Mean)
-	}
+	stampMockMeans(mocks, langFor(r))
 	a.render(w, r, "audition_detail.html", auditionDetailData{
 		Title: c.Name, Nav: "auditions", Audition: c,
 		Concluded: !c.Archived && c.Date < todayStr(),
@@ -2078,6 +2077,9 @@ type pieceDetailData struct {
 	Recordings       []recordingRow
 	RecorderDate     string
 	RecorderMockItem int64
+	Tempo            tempoChart
+	HasTempo         bool
+	TempoLatest      int
 }
 
 // pezzoScore is the piece's standing in today's plan scoring, shown on
@@ -2254,9 +2256,19 @@ func (a *App) handlePieceDetail(w http.ResponseWriter, r *http.Request) {
 	if _, err := time.Parse("2006-01-02", recorderDate); err != nil {
 		recorderDate = todayStr()
 	}
+	// The tempo signal exists only when sessions carry a BPM; the
+	// target line joins only when the piece has a target tempo.
+	tps := tempoPoints(sessions)
+	var tempo tempoChart
+	tempoLatest := 0
+	if len(tps) > 0 {
+		tempo = buildTempoChart(tps, int(p.TargetBPM.Int64), p.TargetBPM.Valid, langFor(r))
+		tempoLatest = tps[len(tps)-1].BPM
+	}
 	a.render(w, r, "piece_detail.html", pieceDetailData{
 		Title: p.Composer + " — " + p.Work, Nav: "pieces", Piece: p, Sessions: sessions, Spark: buildSparkline(cps), Score: score,
 		Recordings: recordingRows(recs), RecorderDate: recorderDate,
+		Tempo: tempo, HasTempo: len(tps) > 0, TempoLatest: tempoLatest,
 	})
 }
 
