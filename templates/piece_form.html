@@ -18,8 +18,9 @@
 </select></label>
 </div>
 <label>{{t "field.difficulty"}} <input type="range" name="difficulty" min="1" max="5" step="1" value="{{if .Piece.Difficulty}}{{.Piece.Difficulty}}{{else}}3{{end}}" oninput="this.nextElementSibling.textContent=this.value"> <output>{{if .Piece.Difficulty}}{{.Piece.Difficulty}}{{else}}3{{end}}</output></label>
+<label>{{t "field.target_bpm"}} <input type="number" name="target_bpm" min="20" max="400" value="{{if .Piece.TargetBPM.Valid}}{{.Piece.TargetBPM.Int64}}{{end}}"></label>
 <fieldset><legend>{{t "nav.auditions"}}</legend>
-{{range .Auditions}}<div class="link-excerpt"><label class="check"><input type="checkbox" name="audition" value="{{.ID}}" {{if index $.Selected .ID}}checked{{end}}> {{.Name}}</label> <input type="text" name="excerpt-{{.ID}}" value="{{index $.Excerpt .ID}}" placeholder="{{t "field.excerpt_ph"}}"></div>{{end}}
+{{range .Auditions}}{{$aid := .ID}}<div class="link-excerpt"><label class="check"><input type="checkbox" name="audition" value="{{.ID}}" {{if index $.Selected .ID}}checked{{end}}> {{.Name}}</label> <input type="text" name="excerpt-{{.ID}}" value="{{index $.Excerpt .ID}}" placeholder="{{t "field.excerpt_ph"}}">{{if index $.Rounds $aid}} <select name="round-{{$aid}}"><option value="">{{t "rounds.all"}}</option>{{range $rd := index $.Rounds $aid}}<option value="{{$rd.ID}}"{{if eq (index $.SelRound $aid) $rd.ID}} selected{{end}}>{{$rd.Name}}</option>{{end}}</select>{{end}}</div>{{end}}
 </fieldset>
 <div class="row btns">
 <button type="submit">{{t "common.save"}}</button>

@@ -60,6 +60,7 @@
   "err.link_missing": "falta a ligação de recurso",
   "err.name_date_required": "o nome e a data são obrigatórios",
   "err.piece_invalid": "peça inválida",
+  "err.round_name_required": "O nome da fase é obrigatório.",
   "err.session_invalid": "dados de sessão inválidos",
   "err.time_invalid": "hora inválida",
   "field.composer": "Compositor",
@@ -83,6 +84,7 @@
   "field.other_link": "Outra ligação",
   "field.priority": "Prioridade",
   "field.security": "Segurança",
+  "field.target_bpm": "Tempo alvo (BPM)",
   "field.work": "Obra",
   "filter.all": "todas",
   "forecast.reason_after": "a partir do dia a seguir à audição de %s, as suas peças deixam o topo da classificação",
@@ -166,6 +168,12 @@
     "one": "%d recurso",
     "other": "%d recursos"
   },
+  "rounds.add": "Adicionar fase",
+  "rounds.all": "Todas as fases",
+  "rounds.empty": "Sem fases.",
+  "rounds.name_ph": "Nome da fase, ex. Eliminatória",
+  "rounds.note": "Atribua uma peça a uma fase no formulário da peça. Sem fase vale para todas.",
+  "rounds.title": "Fases",
   "score.auditions_count": {
     "one": "em %d audição:",
     "other": "em %d audições:"
