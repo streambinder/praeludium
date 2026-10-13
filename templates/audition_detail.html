@@ -62,5 +62,19 @@
 {{else}}<p class="empty">{{t "detail.no_pieces"}}</p>{{end}}
 </div>
 </section>
+<section>
+<div class="section-head"><h2>{{t "mock.history"}}</h2><span class="meta">{{len .Mocks}}</span></div>
+<p><a class="btn" href="/auditions/{{.Audition.ID}}/mock">{{t "mock.start"}}</a></p>
+{{if .Mocks}}
+<div class="stack">
+{{range .Mocks}}
+<article class="card reveal">
+<div class="card-head"><strong><a class="card-link" href="/auditions/{{$.Audition.ID}}/mock/{{.ID}}">{{dateIT .Date}}</a></strong>
+<span class="meta">{{if .RoundName}}{{.RoundName}} · {{end}}{{t "mock.progress" .Rated (len .Items)}}{{if .Rated}} · {{t "mock.mean" .MeanText}}{{end}}</span></div>
+</article>
+{{end}}
+</div>
+{{else}}<p class="empty">{{t "mock.empty"}}</p>{{end}}
+</section>
 <p><a href="/auditions">&larr; {{t "detail.back"}}</a></p>
 {{end}}

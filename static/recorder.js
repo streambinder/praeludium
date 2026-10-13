@@ -107,6 +107,9 @@
         var fd = new FormData();
         fd.append("audio", blob, "take");
         fd.append("taken_on", root.getAttribute("data-date"));
+      if (root.getAttribute("data-mock-item")) {
+        fd.append("mock_item_id", root.getAttribute("data-mock-item"));
+      }
         fd.append("duration_sec", String(duration));
         saveBtn.disabled = true;
         statusEl.textContent = "…";

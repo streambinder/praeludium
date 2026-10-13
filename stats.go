@@ -523,15 +523,19 @@ func (a *App) diaryStats(lang string) (diaryStats, error) {
 	// pieces, for each upcoming audition.
 	today, _ := time.Parse("2006-01-02", todayStr())
 	since := today.AddDate(0, 0, -13).Format("2006-01-02")
+	// A piece counts as touched when it has study time in the window
+	// or was played in a mock audition in the window.
 	crows, err := a.db.Query(`SELECT au.name,
 		COUNT(DISTINCT p.id),
-		COUNT(DISTINCT CASE WHEN s.id IS NOT NULL THEN p.id END)
+		COUNT(DISTINCT CASE WHEN s.id IS NOT NULL OR EXISTS (
+			SELECT 1 FROM mock_items mi JOIN mocks m ON m.id = mi.mock_id
+			WHERE mi.piece_id = p.id AND m.date >= ?) THEN p.id END)
 		FROM auditions au
 		JOIN piece_audition pa ON pa.audition_id = au.id
 		JOIN pieces p ON p.id = pa.piece_id AND p.archived_at IS NULL
 		LEFT JOIN sessions s ON s.piece_id = p.id AND s.minutes > 0 AND s.date >= ?
 		WHERE au.archived_at IS NULL AND au.audition_date >= ?
-		GROUP BY au.id ORDER BY au.audition_date`, since, todayStr())
+		GROUP BY au.id ORDER BY au.audition_date`, since, since, todayStr())
 	if err != nil {
 		return out, err
 	}

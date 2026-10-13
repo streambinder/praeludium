@@ -1,0 +1,38 @@
+{{define "content"}}
+<div class="page-head">
+<span class="overline">{{t "mock.title"}} · {{dateIT .Mock.Date}}{{if .Mock.RoundName}} · {{.Mock.RoundName}}{{end}}</span>
+<h1>{{.Audition.Name}}</h1>
+<p class="meta">{{t "mock.progress" .Mock.Rated (len .Mock.Items)}}</p>
+</div>
+
+{{if .Current}}
+<section class="panel reveal">
+<div class="section-head"><h2>{{.Current.Title}}</h2></div>
+{{if .Current.Movement}}<p class="meta">{{.Current.Movement}}</p>{{end}}
+{{if .Current.Excerpt}}<p>{{.Current.Excerpt}}</p>{{end}}
+{{if .Mock.RecordTake}}{{template "recorder" .}}{{end}}
+<form method="post" action="/auditions/{{.Audition.ID}}/mock/{{.Mock.ID}}/rate" class="mock-rate">
+<input type="hidden" name="item_id" value="{{.Current.ID}}">
+<label>{{t "mock.rate"}} <input type="range" name="confidence" min="1" max="5" step="1" value="3" oninput="this.nextElementSibling.textContent=this.value"> <output>3</output></label>
+<label>{{t "field.note"}} <input type="text" name="note"></label>
+<div class="row btns"><button type="submit">{{if .LastStep}}{{t "mock.finish"}}{{else}}{{t "mock.next"}}{{end}}</button></div>
+</form>
+</section>
+{{else}}
+<section class="panel reveal">
+<div class="section-head"><h2>{{t "mock.done"}}</h2><span class="meta">{{t "mock.mean" .MeanLabel}}/5</span></div>
+<div class="stack">
+{{range .Mock.Items}}
+<article class="card reveal">
+<div class="card-head"><strong>{{.Position}}. <a class="card-link" href="/diary/piece/{{.PieceID}}">{{.Title}}</a></strong>
+<span class="badge">{{t "session.security" .Confidence}}</span></div>
+{{if .Note}}<div class="meta">{{.Note}}</div>{{end}}
+{{range index $.ItemRecordings .ID}}<audio controls preload="none" src="/recordings/{{.Rec.ID}}/audio"></audio>{{end}}
+</article>
+{{end}}
+</div>
+<form method="post" action="/auditions/{{.Audition.ID}}/mock/{{.Mock.ID}}/delete" class="inline"><button class="secondary" type="submit">{{t "mock.delete"}}</button></form>
+</section>
+<p><a href="/auditions/{{.Audition.ID}}">&larr; {{t "detail.back_to"}}</a></p>
+{{end}}
+{{end}}
