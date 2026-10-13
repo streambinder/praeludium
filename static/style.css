@@ -703,6 +703,12 @@ h2 {
   height: 0.5rem;
 }
 
+.chip .chip-round {
+  margin-left: 0.35rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
 .map-filters {
   margin: 0 0 0.85rem;
   gap: 0.45rem;
