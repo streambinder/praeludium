@@ -1,29 +1,15 @@
 package main
 
 import (
-	_ "embed"
 	"log"
-	"net"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
-
-	"github.com/oschwald/maxminddb-golang"
 )
 
 // Language resolution, in order: an explicit choice stored in a
-// cookie, the browser's Accept-Language, the country of the origin
-// IP (only when the header names no supported language), English.
-
-//go:embed geoip/country.mmdb
-var geoipDB []byte
-
-var (
-	geoOnce   sync.Once
-	geoReader *maxminddb.Reader
-)
+// cookie, the browser's Accept-Language, English.
 
 func langFor(r *http.Request) string {
 	if c, err := r.Cookie("lang"); err == nil && langSupported(c.Value) {
@@ -31,11 +17,6 @@ func langFor(r *http.Request) string {
 	}
 	if lang := acceptLanguage(r.Header.Get("Accept-Language")); lang != "" {
 		return lang
-	}
-	if ip := clientIP(r); ip != nil {
-		if lang := countryLanguage(ip); lang != "" {
-			return lang
-		}
 	}
 	return "en"
 }
@@ -75,78 +56,6 @@ func acceptLanguage(header string) string {
 	}
 	sort.SliceStable(prefs, func(i, j int) bool { return prefs[i].q > prefs[j].q })
 	return prefs[0].lang
-}
-
-// clientIP returns the first public IP of the request chain: the
-// proxy's X-Forwarded-For, then X-Real-IP, then the direct peer.
-func clientIP(r *http.Request) net.IP {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		for _, part := range strings.Split(xff, ",") {
-			if ip := net.ParseIP(strings.TrimSpace(part)); ip != nil && isPublicIP(ip) {
-				return ip
-			}
-		}
-	}
-	if xr := strings.TrimSpace(r.Header.Get("X-Real-IP")); xr != "" {
-		if ip := net.ParseIP(xr); ip != nil && isPublicIP(ip) {
-			return ip
-		}
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
-	if ip := net.ParseIP(host); ip != nil && isPublicIP(ip) {
-		return ip
-	}
-	return nil
-}
-
-func isPublicIP(ip net.IP) bool {
-	return !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && !ip.IsUnspecified()
-}
-
-type geoRecord struct {
-	Country struct {
-		ISOCode string `maxminddb:"iso_code"`
-	} `maxminddb:"country"`
-}
-
-// countryLanguage maps the country of an IP to one of the supported
-// languages, or "" when the lookup is unavailable or unmapped.
-func countryLanguage(ip net.IP) string {
-	geoOnce.Do(func() {
-		reader, err := maxminddb.FromBytes(geoipDB)
-		if err != nil {
-			log.Printf("geoip: database unavailable: %v", err)
-			return
-		}
-		geoReader = reader
-	})
-	if geoReader == nil {
-		return ""
-	}
-	var rec geoRecord
-	if err := geoReader.Lookup(ip, &rec); err != nil {
-		return ""
-	}
-	return countryToLang[rec.Country.ISOCode]
-}
-
-var countryToLang = map[string]string{
-	"IT": "it", "SM": "it", "VA": "it", "CH": "de",
-	"ES": "es", "MX": "es", "AR": "es", "BO": "es", "CL": "es", "CO": "es",
-	"CR": "es", "CU": "es", "DO": "es", "EC": "es", "SV": "es", "GT": "es",
-	"HN": "es", "NI": "es", "PA": "es", "PY": "es", "PE": "es", "PR": "es",
-	"UY": "es", "VE": "es", "GQ": "es",
-	"FR": "fr", "BE": "fr", "LU": "fr", "MC": "fr", "SN": "fr", "CI": "fr",
-	"ML": "fr", "BF": "fr", "NE": "fr", "TG": "fr", "BJ": "fr", "GA": "fr",
-	"CG": "fr", "CD": "fr", "CM": "fr", "MG": "fr", "HT": "fr",
-	"DE": "de", "AT": "de", "LI": "de",
-	"PT": "pt", "BR": "pt", "AO": "pt", "MZ": "pt", "CV": "pt", "GW": "pt",
-	"GB": "en", "US": "en", "IE": "en", "AU": "en", "NZ": "en", "CA": "en",
-	"ZA": "en", "NG": "en", "KE": "en", "GH": "en", "IN": "en", "SG": "en",
-	"MT": "en", "JM": "en", "TT": "en", "BZ": "en", "GY": "en",
 }
 
 // langNames are the display names of the supported languages,
