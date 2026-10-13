@@ -104,7 +104,7 @@ func TestMockPoolRoundsAndFlow(t *testing.T) {
 
 	// Rate every item; a second rating of the same item is ignored.
 	for _, it := range m.Items {
-		rec := serveForm(t, mux, http.MethodPost, loc+"/rate", url.Values{
+		rec = serveForm(t, mux, http.MethodPost, loc+"/rate", url.Values{
 			"item_id": {intStr(it.ID)}, "confidence": {"4"}, "note": {"ok"},
 		})
 		if rec.Code != http.StatusSeeOther {
@@ -141,7 +141,9 @@ func TestMockPoolRoundsAndFlow(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("delete mock = %d", rec.Code)
 	}
-	recs, _ = a.pieceRecordings(m.Items[0].PieceID)
+	if recs, err = a.pieceRecordings(m.Items[0].PieceID); err != nil {
+		t.Fatal(err)
+	}
 	if len(recs) != 1 || recs[0].MockItemID.Valid {
 		t.Errorf("after delete recordings = %+v", recs)
 	}
@@ -176,9 +178,15 @@ func uploadTakeForItem(t *testing.T, mux *http.ServeMux, item MockItem) *httptes
 	if _, err := part.Write([]byte("mock-audio")); err != nil {
 		t.Fatal(err)
 	}
-	_ = mw.WriteField("taken_on", "2026-10-13")
-	_ = mw.WriteField("duration_sec", "60")
-	_ = mw.WriteField("mock_item_id", intStr(item.ID))
+	if err := mw.WriteField("taken_on", "2026-10-13"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteField("duration_sec", "60"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteField("mock_item_id", intStr(item.ID)); err != nil {
+		t.Fatal(err)
+	}
 	if err := mw.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +230,10 @@ func TestMockHandlersEdgeCases(t *testing.T) {
 	// A mock under audition 1 cannot be rated through audition 2.
 	rec := serveForm(t, mux, http.MethodPost, "/auditions/1/mock", url.Values{"count": {"1"}})
 	loc := rec.Header().Get("Location")
-	mocks, _ := a.auditionMocks(1)
+	mocks, err := a.auditionMocks(1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := mocks[0]
 	if rec := serveForm(t, mux, http.MethodPost, "/auditions/2/mock/"+intStr(m.ID)+"/rate", url.Values{
 		"item_id": {intStr(m.Items[0].ID)}, "confidence": {"5"},

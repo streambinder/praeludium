@@ -11,7 +11,7 @@ import (
 
 func TestBuildTempoChart(t *testing.T) {
 	pts := []tempoPoint{{Date: "2026-09-01", BPM: 80}, {Date: "2026-10-01", BPM: 96}}
-	c := buildTempoChart(pts, 0, false, "en")
+	c := buildTempoChart(pts, 0, false)
 	if c.HasTarget || len(c.Points) != 2 || c.Single {
 		t.Fatalf("chart = %+v", c)
 	}
@@ -19,7 +19,7 @@ func TestBuildTempoChart(t *testing.T) {
 		t.Errorf("polyline = %q", c.Pts)
 	}
 	// A target below the data range stretches the domain to include it.
-	c = buildTempoChart(pts, 60, true, "en")
+	c = buildTempoChart(pts, 60, true)
 	if !c.HasTarget || c.TargetY == "" {
 		t.Fatalf("target chart = %+v", c)
 	}
@@ -27,7 +27,7 @@ func TestBuildTempoChart(t *testing.T) {
 	if n, err := strconv.Atoi(lowest); err != nil || n > 60 {
 		t.Errorf("lowest grid label = %q, target 60 must be inside the domain", lowest)
 	}
-	one := buildTempoChart(pts[:1], 0, false, "en")
+	one := buildTempoChart(pts[:1], 0, false)
 	if !one.Single || one.First != "2026-09-01" {
 		t.Errorf("single = %+v", one)
 	}

@@ -87,7 +87,7 @@ func TestURLParts(t *testing.T) {
 	}
 	p = urlParts("://bad")
 	if p.Head != "://bad" || p.Tail != "" {
-		t.Errorf("urlParts unparseable: got %+v", p)
+		t.Errorf("urlParts did not parse: got %+v", p)
 	}
 }
 

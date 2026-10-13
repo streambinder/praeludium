@@ -35,7 +35,7 @@ func TestPrepTilesForFiltersByConcorso(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := migrate(db); err != nil {
+	if err = migrate(db); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
 	stmts := []string{
@@ -50,7 +50,7 @@ func TestPrepTilesForFiltersByConcorso(t *testing.T) {
 		`INSERT INTO piece_audition(piece_id, audition_id) VALUES(3, 2)`,
 	}
 	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
+		if _, err = db.Exec(s); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}

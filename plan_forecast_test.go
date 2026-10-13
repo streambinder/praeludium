@@ -29,7 +29,10 @@ func forecastTestApp(t *testing.T, seed func(db *sql.DB, today string)) (*App, s
 // after that audition is held, when its pieces leave the ranking.
 func TestForecastEntryAfterRivalConcorso(t *testing.T) {
 	day := func(today string, n int) string {
-		d, _ := time.Parse("2006-01-02", today)
+		d, err := time.Parse("2006-01-02", today)
+		if err != nil {
+			t.Fatal(err)
+		}
 		return d.AddDate(0, 0, n).Format("2006-01-02")
 	}
 	a, today := forecastTestApp(t, func(db *sql.DB, today string) {
@@ -74,7 +77,10 @@ func TestForecastEntryAfterRivalConcorso(t *testing.T) {
 // never enters the top 8 before the audition.
 func TestForecastNeverEnters(t *testing.T) {
 	day := func(today string, n int) string {
-		d, _ := time.Parse("2006-01-02", today)
+		d, err := time.Parse("2006-01-02", today)
+		if err != nil {
+			t.Fatal(err)
+		}
 		return d.AddDate(0, 0, n).Format("2006-01-02")
 	}
 	a, today := forecastTestApp(t, func(db *sql.DB, today string) {

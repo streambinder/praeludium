@@ -1,11 +1,11 @@
 # ---- build ----
-FROM golang:1.26 AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOARCH=arm64 go build -trimpath -o /out/praeludium . \
-	&& mkdir -p /out/data
+  && mkdir -p /out/data
 
 # ---- runtime ----
 FROM gcr.io/distroless/static:nonroot

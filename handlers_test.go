@@ -255,7 +255,7 @@ func TestResourceLinkHelpers(t *testing.T) {
 		t.Errorf("formResourceLinks labels: got %+v", links)
 	}
 	rec := httptest.NewRecorder()
-	if _, ok := formResourceLinks(rec, build(url.Values{"link_url": {"ftp://a.example/x"}})); ok {
+	if _, okBad := formResourceLinks(rec, build(url.Values{"link_url": {"ftp://a.example/x"}})); okBad {
 		t.Error("formResourceLinks invalid scheme: want not ok")
 	}
 	if rec.Code != http.StatusBadRequest {
@@ -294,11 +294,11 @@ func TestAvailabilityHandlers(t *testing.T) {
 		{"start": {"15:00"}, "end": {"14:00"}},
 		{"start": {""}, "end": {""}},
 	} {
-		if code, _, _ := covPost(t, mux, "/availability", form); code != http.StatusBadRequest {
+		if badCode, _, _ := covPost(t, mux, "/availability", form); badCode != http.StatusBadRequest {
 			t.Errorf("add availability %v: want 400, got %d", form, code)
 		}
 	}
-	if code := covPostRaw(t, mux, "/availability", "%zz"); code != http.StatusBadRequest {
+	if badCode := covPostRaw(t, mux, "/availability", "%zz"); badCode != http.StatusBadRequest {
 		t.Errorf("add availability bad form: want 400, got %d", code)
 	}
 	var id int
@@ -357,7 +357,7 @@ func TestSessionHandlers(t *testing.T) {
 	}
 	// Invalid or out-of-range bpm values are ignored, not rejected.
 	for _, raw := range []string{"abc", "0", "401", "-5", ""} {
-		code, _, _ := covPost(t, mux, "/session", url.Values{
+		code, _, _ = covPost(t, mux, "/session", url.Values{
 			"piece_id": {"2"}, "minutes": {"10"}, "confidence": {"3"}, "bpm": {raw},
 		})
 		if code != http.StatusSeeOther {
@@ -376,11 +376,11 @@ func TestSessionHandlers(t *testing.T) {
 		{"piece_id": {"1"}, "minutes": {"10"}, "confidence": {"0"}},
 		{"piece_id": {"1"}, "minutes": {"10"}, "confidence": {"6"}},
 	} {
-		if code, _, _ := covPost(t, mux, "/session", form); code != http.StatusBadRequest {
+		if code, _, _ = covPost(t, mux, "/session", form); code != http.StatusBadRequest {
 			t.Errorf("session %v: want 400, got %d", form, code)
 		}
 	}
-	if code := covPostRaw(t, mux, "/session", "%zz"); code != http.StatusBadRequest {
+	if code = covPostRaw(t, mux, "/session", "%zz"); code != http.StatusBadRequest {
 		t.Errorf("session bad form: want 400, got %d", code)
 	}
 
@@ -448,11 +448,11 @@ func TestPiecesHandlers(t *testing.T) {
 		t.Fatalf("odd kind: want excerpt fallback, got %q", kind)
 	}
 	for _, form := range []url.Values{{"work": {"X"}}, {"composer": {"X"}}, {"composer": {"  "}, "work": {"X"}}} {
-		if code, _, _ := covPost(t, mux, "/pieces", form); code != http.StatusBadRequest {
+		if code, _, _ = covPost(t, mux, "/pieces", form); code != http.StatusBadRequest {
 			t.Errorf("add piece %v: want 400, got %d", form, code)
 		}
 	}
-	if code := covPostRaw(t, mux, "/pieces", "%zz"); code != http.StatusBadRequest {
+	if code = covPostRaw(t, mux, "/pieces", "%zz"); code != http.StatusBadRequest {
 		t.Errorf("add piece bad form: want 400, got %d", code)
 	}
 
@@ -460,10 +460,10 @@ func TestPiecesHandlers(t *testing.T) {
 	if code != http.StatusOK || !strings.Contains(body, "Haydn") {
 		t.Fatalf("edit piece: got %d", code)
 	}
-	if code, _ := covGet(t, mux, "/pieces/99/edit"); code != http.StatusNotFound {
+	if code, _ = covGet(t, mux, "/pieces/99/edit"); code != http.StatusNotFound {
 		t.Errorf("edit missing piece: want 404, got %d", code)
 	}
-	if code, _ := covGet(t, mux, "/pieces/abc/edit"); code != http.StatusNotFound {
+	if code, _ = covGet(t, mux, "/pieces/abc/edit"); code != http.StatusNotFound {
 		t.Errorf("edit invalid piece: want 404, got %d", code)
 	}
 
@@ -498,10 +498,10 @@ func TestPiecesHandlers(t *testing.T) {
 	if links != 0 {
 		t.Fatal("piece links not cleared by update without auditions")
 	}
-	if code, _, _ := covPost(t, mux, "/pieces/abc/edit", url.Values{"composer": {"X"}, "work": {"Y"}}); code != http.StatusNotFound {
+	if code, _, _ = covPost(t, mux, "/pieces/abc/edit", url.Values{"composer": {"X"}, "work": {"Y"}}); code != http.StatusNotFound {
 		t.Errorf("update invalid piece: want 404, got %d", code)
 	}
-	if code := covPostRaw(t, mux, "/pieces/1/edit", "%zz"); code != http.StatusBadRequest {
+	if code = covPostRaw(t, mux, "/pieces/1/edit", "%zz"); code != http.StatusBadRequest {
 		t.Errorf("update piece bad form: want 400, got %d", code)
 	}
 
@@ -574,15 +574,15 @@ func TestAuditionsHandlers(t *testing.T) {
 	if label != "teatro.example" || linkURL != "https://teatro.example/bando" {
 		t.Fatalf("audition link: got label=%q url=%q", label, linkURL)
 	}
-	if code, _, _ := covPost(t, mux, "/auditions", url.Values{"date": {covFuture(5)}}); code != http.StatusBadRequest {
+	if code, _, _ = covPost(t, mux, "/auditions", url.Values{"date": {covFuture(5)}}); code != http.StatusBadRequest {
 		t.Errorf("add audition without name: want 400, got %d", code)
 	}
-	if code, _, _ := covPost(t, mux, "/auditions", url.Values{
+	if code, _, _ = covPost(t, mux, "/auditions", url.Values{
 		"name": {"X"}, "date": {covFuture(5)}, "link_url": {"notaurl"},
 	}); code != http.StatusBadRequest {
 		t.Errorf("add audition invalid link: want 400, got %d", code)
 	}
-	if code := covPostRaw(t, mux, "/auditions", "%zz"); code != http.StatusBadRequest {
+	if code = covPostRaw(t, mux, "/auditions", "%zz"); code != http.StatusBadRequest {
 		t.Errorf("add audition bad form: want 400, got %d", code)
 	}
 
@@ -590,14 +590,14 @@ func TestAuditionsHandlers(t *testing.T) {
 	if code != http.StatusOK || !strings.Contains(body, "Roma") || !strings.Contains(body, "Haydn") {
 		t.Fatalf("audition detail: got %d body %.200s", code, body)
 	}
-	if code, _ := covGet(t, mux, "/auditions/99"); code != http.StatusNotFound {
+	if code, _ = covGet(t, mux, "/auditions/99"); code != http.StatusNotFound {
 		t.Errorf("audition detail missing: want 404, got %d", code)
 	}
 	code, body = covGet(t, mux, "/auditions/1/edit")
 	if code != http.StatusOK || !strings.Contains(body, "Bando") {
 		t.Fatalf("audition edit: got %d", code)
 	}
-	if code, _ := covGet(t, mux, "/auditions/99/edit"); code != http.StatusNotFound {
+	if code, _ = covGet(t, mux, "/auditions/99/edit"); code != http.StatusNotFound {
 		t.Errorf("audition edit missing: want 404, got %d", code)
 	}
 
@@ -618,10 +618,10 @@ func TestAuditionsHandlers(t *testing.T) {
 	if code != http.StatusSeeOther || hdr.Get("Location") != "/auditions" {
 		t.Fatalf("update audition default redirect: got %d loc=%q", code, hdr.Get("Location"))
 	}
-	if code, _, _ := covPost(t, mux, "/auditions/1", url.Values{"name": {""}, "date": {covFuture(3)}}); code != http.StatusBadRequest {
+	if code, _, _ = covPost(t, mux, "/auditions/1", url.Values{"name": {""}, "date": {covFuture(3)}}); code != http.StatusBadRequest {
 		t.Errorf("update audition without name: want 400, got %d", code)
 	}
-	if code, _, _ := covPost(t, mux, "/auditions/abc", url.Values{"name": {"X"}, "date": {covFuture(3)}}); code != http.StatusNotFound {
+	if code, _, _ = covPost(t, mux, "/auditions/abc", url.Values{"name": {"X"}, "date": {covFuture(3)}}); code != http.StatusNotFound {
 		t.Errorf("update invalid audition: want 404, got %d", code)
 	}
 
@@ -631,16 +631,16 @@ func TestAuditionsHandlers(t *testing.T) {
 	if code != http.StatusSeeOther || hdr.Get("Location") != "/auditions/1/edit" {
 		t.Fatalf("add audition link: want 303 to edit, got %d loc=%q", code, hdr.Get("Location"))
 	}
-	if code, _, _ := covPost(t, mux, "/auditions/1/links", url.Values{}); code != http.StatusBadRequest {
+	if code, _, _ = covPost(t, mux, "/auditions/1/links", url.Values{}); code != http.StatusBadRequest {
 		t.Errorf("add audition link empty: want 400, got %d", code)
 	}
-	if code, _, _ := covPost(t, mux, "/auditions/1/links", url.Values{"link_url": {"::bad"}}); code != http.StatusBadRequest {
+	if code, _, _ = covPost(t, mux, "/auditions/1/links", url.Values{"link_url": {"::bad"}}); code != http.StatusBadRequest {
 		t.Errorf("add audition link invalid: want 400, got %d", code)
 	}
-	if code, _, _ := covPost(t, mux, "/auditions/99/links", url.Values{"link_url": {"https://a.example/"}}); code != http.StatusNotFound {
+	if code, _, _ = covPost(t, mux, "/auditions/99/links", url.Values{"link_url": {"https://a.example/"}}); code != http.StatusNotFound {
 		t.Errorf("add link missing audition: want 404, got %d", code)
 	}
-	if code := covPostRaw(t, mux, "/auditions/1/links", "%zz"); code != http.StatusBadRequest {
+	if code = covPostRaw(t, mux, "/auditions/1/links", "%zz"); code != http.StatusBadRequest {
 		t.Errorf("add link bad form: want 400, got %d", code)
 	}
 
@@ -659,10 +659,10 @@ func TestAuditionsHandlers(t *testing.T) {
 	if n != 0 {
 		t.Fatal("audition link not deleted")
 	}
-	if code, _, _ := covPost(t, mux, "/auditions/1/links/xyz/delete", url.Values{}); code != http.StatusNotFound {
+	if code, _, _ = covPost(t, mux, "/auditions/1/links/xyz/delete", url.Values{}); code != http.StatusNotFound {
 		t.Errorf("delete link invalid id: want 404, got %d", code)
 	}
-	if code, _, _ := covPost(t, mux, "/auditions/99/links/1/delete", url.Values{}); code != http.StatusNotFound {
+	if code, _, _ = covPost(t, mux, "/auditions/99/links/1/delete", url.Values{}); code != http.StatusNotFound {
 		t.Errorf("delete link missing audition: want 404, got %d", code)
 	}
 
@@ -747,10 +747,10 @@ func TestDiaryHandlers(t *testing.T) {
 	if code != http.StatusOK || !strings.Contains(body, "Haydn") {
 		t.Fatalf("diary day: got %d body %.200s", code, body)
 	}
-	if code, _ := covGet(t, mux, "/diary/day/not-a-date"); code != http.StatusNotFound {
+	if code, _ = covGet(t, mux, "/diary/day/not-a-date"); code != http.StatusNotFound {
 		t.Errorf("diary day invalid date: want 404, got %d", code)
 	}
-	if code, _ := covGet(t, mux, "/diary/day/2026-02-30"); code != http.StatusNotFound {
+	if code, _ = covGet(t, mux, "/diary/day/2026-02-30"); code != http.StatusNotFound {
 		t.Errorf("diary day impossible date: want 404, got %d", code)
 	}
 	code, body = covGet(t, mux, "/diary/piece/1")
@@ -984,42 +984,42 @@ func TestInvalidStoredDates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := a.scorePiece(p, todayStr(), DefaultCoeffs(), false); err == nil {
+	if _, _, err = a.scorePiece(p, todayStr(), DefaultCoeffs(), false); err == nil {
 		t.Error("scorePiece with an invalid audition date: want error")
 	}
-	if _, err := a.newPlanForecaster(todayStr()); err == nil {
+	if _, err = a.newPlanForecaster(todayStr()); err == nil {
 		t.Error("newPlanForecaster with an invalid audition date: want error")
 	}
-	if _, _, err := a.daysSincePractice(1, todayStr()); err == nil {
+	if _, _, err = a.daysSincePractice(1, todayStr()); err == nil {
 		t.Error("daysSincePractice with an invalid session date: want error")
 	}
-	if _, err := a.prepTilesFor("not-a-date", prepBiasDesktop, nil, "en"); err == nil {
+	if _, err = a.prepTilesFor("not-a-date", prepBiasDesktop, nil, "en"); err == nil {
 		t.Error("prepTilesFor with an invalid day: want error")
 	}
 
 	f := &planForecaster{coeffs: DefaultCoeffs()}
 	badAudition := forecastInput{id: 1, auditions: []Audition{{ID: 1, Date: "not-a-date", Weight: 3}}}
-	if _, _, err := f.scoreOn(badAudition, "2026-10-10"); err == nil {
+	if _, _, err = f.scoreOn(badAudition, "2026-10-10"); err == nil {
 		t.Error("scoreOn with an invalid audition date: want error")
 	}
 	badLast := forecastInput{id: 1, auditions: []Audition{{ID: 1, Date: "2027-01-01", Weight: 3}}, last: "not-a-date"}
-	if _, _, err := f.scoreOn(badLast, "2026-10-10"); err == nil {
+	if _, _, err = f.scoreOn(badLast, "2026-10-10"); err == nil {
 		t.Error("scoreOn with an invalid last practice date: want error")
 	}
 	fBad := &planForecaster{coeffs: DefaultCoeffs(), inputs: []forecastInput{
 		{id: 1, auditions: []Audition{{ID: 1, Date: "2027-01-01", Weight: 3}}},
 	}}
-	if _, _, _, err := fBad.entryDate(1, "not-a-date"); err == nil {
+	if _, _, _, err = fBad.entryDate(1, "not-a-date"); err == nil {
 		t.Error("entryDate with an invalid today: want error")
 	}
-	if got, _, _, err := f.entryDate(99, "2026-10-10"); err != nil || got != "" {
+	if got, _, _, eerr := f.entryDate(99, "2026-10-10"); eerr != nil || got != "" {
 		t.Errorf("entryDate for an unknown piece: want empty, got %q err=%v", got, err)
 	}
 	target := forecastInput{id: 1, auditions: []Audition{{ID: 1, Date: "2027-01-01", Weight: 3}}}
-	if _, err := f.entryReason(&target, "2026-10-10", "not-a-date"); err == nil {
+	if _, err = f.entryReason(&target, "2026-10-10", "not-a-date"); err == nil {
 		t.Error("entryReason with an invalid entry day: want error")
 	}
-	if _, _, _, err := upcomingConcorsi(Piece{Auditions: []Audition{{Date: "not-a-date"}}}, "2026-10-10"); err == nil {
+	if _, _, _, err = upcomingConcorsi(Piece{Auditions: []Audition{{Date: "not-a-date"}}}, "2026-10-10"); err == nil {
 		t.Error("upcomingConcorsi with an invalid date: want error")
 	}
 	// A piece whose only audition is archived or past has no upcoming list.

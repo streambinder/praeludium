@@ -15,7 +15,7 @@ func TestListPiecesSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := migrate(db); err != nil {
+	if err = migrate(db); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
 	stmts := []string{
@@ -26,7 +26,7 @@ func TestListPiecesSearch(t *testing.T) {
 		`INSERT INTO piece_audition(piece_id, audition_id, excerpt) VALUES(2, 1, 'scherzo')`,
 	}
 	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
+		if _, err = db.Exec(s); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -45,9 +45,9 @@ func TestListPiecesSearch(t *testing.T) {
 		{"", 1}, // empty query = no filter, all pieces
 	}
 	for _, tc := range cases {
-		got, err := a.listPieces(0, "", false, tc.query)
-		if err != nil {
-			t.Fatalf("query %q: %v", tc.query, err)
+		got, lerr := a.listPieces(0, "", false, tc.query)
+		if lerr != nil {
+			t.Fatalf("query %q: %v", tc.query, lerr)
 		}
 		if tc.want == 0 {
 			if len(got) != 0 {

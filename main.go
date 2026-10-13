@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -40,7 +41,11 @@ func main() {
 		if port == "" {
 			port = "8080"
 		}
-		os.Exit(runHealthcheck(port))
+		portNum, perr := strconv.Atoi(port)
+		if perr != nil || portNum < 1 || portNum > 65535 {
+			os.Exit(1)
+		}
+		os.Exit(runHealthcheck(portNum))
 	}
 	cfg := loadConfig()
 	if err := run(cfg); err != nil {
@@ -108,14 +113,18 @@ func logRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, req)
-		log.Printf("%s %s -> %d (%dms)", req.Method, req.URL.Path, rec.status, time.Since(start).Milliseconds())
+		// The quoted method and path cannot inject log lines: %q escapes
+		// every control character in the request values.
+		log.Printf("%q %q -> %d (%dms)", req.Method, req.URL.Path, rec.status, time.Since(start).Milliseconds()) //nolint:gosec // quoted values cannot inject log lines
 	})
 }
 
 // runHealthcheck probes the local /healthz endpoint for container HEALTHCHECK.
-func runHealthcheck(port string) int {
+func runHealthcheck(port int) int {
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:" + port + "/healthz")
+	// The host is a loopback literal and the port is a validated integer:
+	// no part of the URL comes from request data.
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/healthz", port)) //nolint:gosec // loopback host, integer port
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "healthcheck:", err)
 		return 1

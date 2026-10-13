@@ -19,7 +19,7 @@ func TestLogRequests(t *testing.T) {
 		w.WriteHeader(http.StatusTeapot)
 	}))
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/pieces", nil))
-	if !strings.Contains(buf.String(), "GET /pieces -> 418") {
+	if !strings.Contains(buf.String(), `"GET" "/pieces" -> 418`) {
 		t.Fatalf("missing request line, got %q", buf.String())
 	}
 

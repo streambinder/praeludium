@@ -14,7 +14,7 @@ func TestStampPrepLevels(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := migrate(db); err != nil {
+	if err = migrate(db); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
 	today := time.Now().Format("2006-01-02")
@@ -27,7 +27,7 @@ func TestStampPrepLevels(t *testing.T) {
 		`INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES('` + today + `', 1, 180, 5)`,
 	}
 	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
+		if _, err = db.Exec(s); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}

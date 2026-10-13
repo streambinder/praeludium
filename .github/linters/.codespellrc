@@ -1,0 +1,5 @@
+[codespell]
+# The locale catalogs are foreign-language data: their words are
+# exempt from the English dictionary, one word at a time.
+skip = */locales/*.json
+ignore-words-list = alle,als,approche,avance,celles,checkin,confirmas,connexion,dezember,erro,explicite,fase,fases,februar,formule,hace,historial,ist,januar,juli,juni,lief,lient,mesure,momento,mouvement,nome,oder,oktober,ore,pris,registrate,requiere,ressource,ressources,reste,saem,serie,sie,somme,stopp,studi,tage,termine,unter,vai,valide,vor

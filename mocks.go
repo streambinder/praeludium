@@ -1,9 +1,10 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"log"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -59,7 +60,7 @@ func (a *App) mockByID(id int64) (Mock, error) {
 	items, err := collect(rows, func(rows *sql.Rows) (MockItem, error) {
 		var it MockItem
 		var composer, work string
-		err := rows.Scan(&it.ID, &it.MockID, &it.PieceID, &it.Position, &it.Confidence, &it.Note,
+		err = rows.Scan(&it.ID, &it.MockID, &it.PieceID, &it.Position, &it.Confidence, &it.Note,
 			&composer, &work, &it.Movement, &it.Excerpt)
 		it.Title = composer + " — " + work
 		return it, err
@@ -89,7 +90,7 @@ func (a *App) auditionMocks(auditionID int64) ([]Mock, error) {
 	}
 	ids, err := collect(rows, func(rows *sql.Rows) (int64, error) {
 		var id int64
-		err := rows.Scan(&id)
+		err = rows.Scan(&id)
 		return id, err
 	})
 	if err != nil {
@@ -152,8 +153,30 @@ func (a *App) handleMockSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, r, "mock_setup.html", mockSetupData{
-		Title: tr(langFor(r), "mock.title"), Nav: "auditions", Audition: c, Rounds: rounds, PoolCount: len(pool),
+		Title: tr(langFor(r), "mock.title"), Nav: navAuditions, Audition: c, Rounds: rounds, PoolCount: len(pool),
 	})
+}
+
+// mockRoundID parses and validates the optional round of a new
+// mock. The round must belong to the audition. On failure the
+// helper writes the error and reports false.
+func (a *App) mockRoundID(w http.ResponseWriter, r *http.Request, auditionID int64) (sql.NullInt64, bool) {
+	var roundID sql.NullInt64
+	raw := strings.TrimSpace(r.FormValue("round_id"))
+	if raw == "" {
+		return roundID, true
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		http.Error(w, "bad round", http.StatusBadRequest)
+		return roundID, false
+	}
+	var owner int64
+	if err := a.db.QueryRow(`SELECT audition_id FROM audition_rounds WHERE id=?`, id).Scan(&owner); err != nil || owner != auditionID {
+		http.Error(w, "bad round", http.StatusBadRequest)
+		return roundID, false
+	}
+	return sql.NullInt64{Int64: id, Valid: true}, true
 }
 
 func (a *App) handleMockCreate(w http.ResponseWriter, r *http.Request) {
@@ -165,19 +188,9 @@ func (a *App) handleMockCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	var roundID sql.NullInt64
-	if raw := strings.TrimSpace(r.FormValue("round_id")); raw != "" {
-		id, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			http.Error(w, "bad round", http.StatusBadRequest)
-			return
-		}
-		var owner int64
-		if err := a.db.QueryRow(`SELECT audition_id FROM audition_rounds WHERE id=?`, id).Scan(&owner); err != nil || owner != c.ID {
-			http.Error(w, "bad round", http.StatusBadRequest)
-			return
-		}
-		roundID = sql.NullInt64{Int64: id, Valid: true}
+	roundID, ok := a.mockRoundID(w, r, c.ID)
+	if !ok {
+		return
 	}
 	pool, err := a.mockPool(c.ID, roundID)
 	if err != nil {
@@ -195,7 +208,15 @@ func (a *App) handleMockCreate(w http.ResponseWriter, r *http.Request) {
 	if count > len(pool) {
 		count = len(pool)
 	}
-	rand.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
+	for i := len(pool) - 1; i > 0; i-- {
+		n, rerr := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
+		if rerr != nil {
+			http.Error(w, rerr.Error(), http.StatusInternalServerError)
+			return
+		}
+		j := int(n.Int64())
+		pool[i], pool[j] = pool[j], pool[i]
+	}
 	pool = pool[:count]
 	record := 0
 	if r.FormValue("record") != "" {
@@ -253,7 +274,7 @@ func (a *App) handleMockRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := mockRunData{
-		Title: tr(langFor(r), "mock.title"), Nav: "auditions", Audition: c, Mock: m,
+		Title: tr(langFor(r), "mock.title"), Nav: navAuditions, Audition: c, Mock: m,
 		RecorderDate: m.Date, ItemRecordings: map[int64][]recordingRow{},
 	}
 	for i := range m.Items {
@@ -266,9 +287,9 @@ func (a *App) handleMockRun(w http.ResponseWriter, r *http.Request) {
 	data.LastStep = data.Current != nil && m.Rated == len(m.Items)-1
 	data.MeanLabel = decimal(langFor(r), m.Mean)
 	if data.Current != nil {
-		p, err := a.getPiece(data.Current.PieceID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		p, pieceErr := a.getPiece(data.Current.PieceID)
+		if pieceErr != nil {
+			http.Error(w, pieceErr.Error(), http.StatusInternalServerError)
 			return
 		}
 		data.Piece = p
@@ -283,7 +304,7 @@ func (a *App) handleMockRun(w http.ResponseWriter, r *http.Request) {
 	}
 	recs, err := collect(rows, func(rows *sql.Rows) (Recording, error) {
 		var rec Recording
-		err := rows.Scan(&rec.ID, &rec.PieceID, &rec.MockItemID, &rec.TakenOn, &rec.Filename,
+		err = rows.Scan(&rec.ID, &rec.PieceID, &rec.MockItemID, &rec.TakenOn, &rec.Filename,
 			&rec.DurationSec, &rec.SizeBytes, &rec.ShareToken, &rec.CreatedAt)
 		return rec, err
 	})
@@ -315,7 +336,7 @@ func (a *App) handleMockRate(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if err := r.ParseForm(); err != nil {
+	if err = r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

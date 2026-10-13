@@ -29,6 +29,19 @@ const (
 	kindSolo    = "solo"
 )
 
+// Table names that code outside the schema also references.
+const (
+	tableAuditions     = "auditions"
+	tablePieceAudition = "piece_audition"
+)
+
+// Session note markers for days without practice.
+const (
+	noteSkipped     = "skipped"
+	notePostponed   = "postponed"
+	noteAutoSkipped = "auto-skipped"
+)
+
 type Piece struct {
 	ID         int64
 	Composer   string
@@ -79,6 +92,17 @@ func openDB(path string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// addColumn adds one column to a table. A duplicate-column error
+// means the migration already ran and is not a failure.
+func addColumn(db *sql.DB, stmt, label string) error {
+	if _, err := db.Exec(stmt); err != nil {
+		if !isDupColumnErr(err) {
+			return fmt.Errorf("migrate %s: %w", label, err)
+		}
+	}
+	return nil
 }
 
 func migrate(db *sql.DB) error {
@@ -181,18 +205,12 @@ func migrate(db *sql.DB) error {
 		}
 	}
 	// auditions.archived_at was added after the first schema revision.
-	if _, err := db.Exec(`ALTER TABLE auditions ADD COLUMN archived_at TEXT`); err != nil {
-		// duplicate column means the migration already ran; anything else is real.
-		if !isDupColumnErr(err) {
-			return fmt.Errorf("migrate archived_at: %w", err)
-		}
+	if err := addColumn(db, `ALTER TABLE auditions ADD COLUMN archived_at TEXT`, "archived_at"); err != nil {
+		return err
 	}
 	// pieces.difficulty was added after the first schema revision.
-	if _, err := db.Exec(`ALTER TABLE pieces ADD COLUMN difficulty INTEGER NOT NULL DEFAULT 3`); err != nil {
-		// duplicate column means the migration already ran; anything else is real.
-		if !isDupColumnErr(err) {
-			return fmt.Errorf("migrate difficulty: %w", err)
-		}
+	if err := addColumn(db, `ALTER TABLE pieces ADD COLUMN difficulty INTEGER NOT NULL DEFAULT 3`, "difficulty"); err != nil {
+		return err
 	}
 	// piece_audition.excerpt holds the excerpt each audition asks for; the
 	// column started out as notes and is renamed when present.
@@ -201,25 +219,18 @@ func migrate(db *sql.DB) error {
 	}
 	// piece_audition.round_id names the round a linked piece belongs
 	// to; NULL means the piece is asked in every round.
-	if _, err := db.Exec(`ALTER TABLE piece_audition ADD COLUMN round_id INTEGER REFERENCES audition_rounds(id) ON DELETE SET NULL`); err != nil {
-		if !isDupColumnErr(err) {
-			return fmt.Errorf("migrate round_id: %w", err)
-		}
+	if err := addColumn(db, `ALTER TABLE piece_audition ADD COLUMN round_id INTEGER REFERENCES audition_rounds(id) ON DELETE SET NULL`, "round_id"); err != nil {
+		return err
 	}
 	// pieces.target_bpm is the optional target tempo of a piece; NULL
 	// means the piece carries no tempo signal.
-	if _, err := db.Exec(`ALTER TABLE pieces ADD COLUMN target_bpm INTEGER`); err != nil {
-		if !isDupColumnErr(err) {
-			return fmt.Errorf("migrate target_bpm: %w", err)
-		}
+	if err := addColumn(db, `ALTER TABLE pieces ADD COLUMN target_bpm INTEGER`, "target_bpm"); err != nil {
+		return err
 	}
 	// sessions.bpm holds the optional metronome mark of a practice
 	// session; NULL when the player did not record one.
-	if _, err := db.Exec(`ALTER TABLE sessions ADD COLUMN bpm INTEGER`); err != nil {
-		// duplicate column means the migration already ran; anything else is real.
-		if !isDupColumnErr(err) {
-			return fmt.Errorf("migrate bpm: %w", err)
-		}
+	if err := addColumn(db, `ALTER TABLE sessions ADD COLUMN bpm INTEGER`, "bpm"); err != nil {
+		return err
 	}
 	// Stored values started out in Italian; rewrite them in English.
 	for _, q := range []string{
@@ -241,8 +252,8 @@ func migrate(db *sql.DB) error {
 // rewritten at the end of migrate, once the tables exist for sure.
 func renameLegacySchema(db *sql.DB) error {
 	tables := [][2]string{
-		{"concorsi", "auditions"},
-		{"piece_concorso", "piece_audition"},
+		{"concorsi", tableAuditions},
+		{"piece_concorso", tablePieceAudition},
 		{"concorso_links", "audition_links"},
 	}
 	for _, t := range tables {
@@ -258,8 +269,8 @@ func renameLegacySchema(db *sql.DB) error {
 		}
 	}
 	cols := []struct{ table, from, to string }{
-		{"piece_audition", "concorso_id", "audition_id"},
-		{"piece_audition", "estratto", "excerpt"},
+		{tablePieceAudition, "concorso_id", "audition_id"},
+		{tablePieceAudition, "estratto", "excerpt"},
 		{"audition_links", "concorso_id", "audition_id"},
 		{"sessions", "tempo", "bpm"},
 	}
@@ -288,7 +299,7 @@ func tableExists(db *sql.DB, name string) (bool, error) {
 // ensureLinkExcerpt renames the original notes column to excerpt, or adds
 // excerpt on installs that never had notes.
 func ensureLinkExcerpt(db *sql.DB) error {
-	cols, err := tableColumns(db, "piece_audition")
+	cols, err := tableColumns(db, tablePieceAudition)
 	if err != nil {
 		return fmt.Errorf("migrate piece_audition excerpt: %w", err)
 	}

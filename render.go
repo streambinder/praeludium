@@ -32,13 +32,22 @@ var weekdays = map[string][]string{
 	"pt": {"domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"},
 }
 
+// Navigation section keys.
+const (
+	navPieces    = "pieces"
+	navAuditions = "auditions"
+)
+
+// agosto is the name of August in Italian, Spanish and Portuguese.
+const agosto = "agosto"
+
 var months = map[string][]string{
 	"en": {"", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"},
-	"it": {"", "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"},
-	"es": {"", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"},
+	"it": {"", "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", agosto, "settembre", "ottobre", "novembre", "dicembre"},
+	"es": {"", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", agosto, "septiembre", "octubre", "noviembre", "diciembre"},
 	"fr": {"", "janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"},
 	"de": {"", "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"},
-	"pt": {"", "janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"},
+	"pt": {"", "janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", agosto, "setembro", "outubro", "novembro", "dezembro"},
 }
 
 // dateIn renders an ISO date as a long local date in lang.
@@ -114,7 +123,7 @@ type urlSplit struct{ Head, Tail string }
 
 // urlParts splits a URL into its scheme://host head and the remaining tail,
 // so templates can render it on one line keeping the end visible.
-// Unparseable or host-less URLs come back whole as the head.
+// URLs that fail to parse or have no host come back whole as the head.
 func urlParts(raw string) urlSplit {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {

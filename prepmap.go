@@ -101,11 +101,13 @@ func (a *App) stampPrepLevels(pieces []Piece) error {
 		levels[id] = prepLevelFromScore(means[id])
 	}
 	for i := range pieces {
-		pieces[i].Level = byPiece[pieces[i].ID]
-		pieces[i].Prep = scores[pieces[i].ID]
-		for j := range pieces[i].Auditions {
-			pieces[i].Auditions[j].Level = levels[pieces[i].Auditions[j].ID]
-			pieces[i].Auditions[j].Prep = means[pieces[i].Auditions[j].ID]
+		p := &pieces[i]
+		p.Level = byPiece[p.ID]
+		p.Prep = scores[p.ID]
+		for j := range p.Auditions {
+			aud := &p.Auditions[j]
+			aud.Level = levels[aud.ID]
+			aud.Prep = means[aud.ID]
 		}
 	}
 	return nil
@@ -154,6 +156,40 @@ func lastPracticedDay(sessions []prepSession) string {
 	return ""
 }
 
+// prepAggregates totals the session history of a piece: all
+// minutes, the sessions inside the recent window, and the
+// confidence sum and count over the five most recent ratings.
+func prepAggregates(sessions []prepSession, cutoff string) (minutes, recent, confSum, confN int) {
+	for i, s := range sessions {
+		minutes += s.Minutes
+		if s.Minutes > 0 && s.Date >= cutoff {
+			recent++
+		}
+		if i < 5 && s.Confidence > 0 {
+			confSum += s.Confidence
+			confN++
+		}
+	}
+	return minutes, recent, confSum, confN
+}
+
+// applyDecay halves the preparation score for every two weeks of
+// neglect past the first idle week.
+func applyDecay(score float64, sessions []prepSession, today time.Time) float64 {
+	last := lastPracticedDay(sessions)
+	if last == "" {
+		return score
+	}
+	d, err := time.Parse("2006-01-02", last)
+	if err != nil {
+		return score
+	}
+	if idle := int(today.Sub(d).Hours() / 24); idle > 7 {
+		score *= math.Pow(0.5, float64(idle-7)/14)
+	}
+	return score
+}
+
 func prepScore(difficulty int, sessions []prepSession, today time.Time) (score float64, level int, avgConf float64, rated bool) {
 	if difficulty < 1 {
 		difficulty = 1
@@ -165,21 +201,8 @@ func prepScore(difficulty int, sessions []prepSession, today time.Time) (score f
 	if n == 0 {
 		return 0, 0, 0, false
 	}
-	minutes := 0
-	recent := 0
 	cutoff := today.AddDate(0, 0, -21).Format("2006-01-02")
-	confSum := 0
-	confN := 0
-	for i, s := range sessions {
-		minutes += s.Minutes
-		if s.Minutes > 0 && s.Date >= cutoff {
-			recent++
-		}
-		if i < 5 && s.Confidence > 0 {
-			confSum += s.Confidence
-			confN++
-		}
-	}
+	minutes, recent, confSum, confN := prepAggregates(sessions, cutoff)
 	rated = confN > 0
 	if rated {
 		avgConf = float64(confSum) / float64(confN)
@@ -204,15 +227,7 @@ func prepScore(difficulty int, sessions []prepSession, today time.Time) (score f
 	if score > 1 {
 		score = 1
 	}
-	// Preparation decays once a piece has not been practiced for over a
-	// week: every further two weeks of neglect halve what remains.
-	if last := lastPracticedDay(sessions); last != "" {
-		if d, err := time.Parse("2006-01-02", last); err == nil {
-			if idle := int(today.Sub(d).Hours() / 24); idle > 7 {
-				score *= math.Pow(0.5, float64(idle-7)/14)
-			}
-		}
-	}
+	score = applyDecay(score, sessions, today)
 	level = prepLevelFromScore(score)
 	if level > 4 {
 		level = 4

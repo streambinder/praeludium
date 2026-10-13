@@ -69,10 +69,12 @@ func (a *App) recordingByToken(token string) (Recording, error) {
 	return rec, err
 }
 
+const extWebM = ".webm"
+
 func recordingExt(contentType string) string {
 	switch {
 	case strings.Contains(contentType, "webm"):
-		return ".webm"
+		return extWebM
 	case strings.Contains(contentType, "ogg"):
 		return ".ogg"
 	case strings.Contains(contentType, "mp4"):
@@ -82,13 +84,13 @@ func recordingExt(contentType string) string {
 	case strings.Contains(contentType, "wav"):
 		return ".wav"
 	default:
-		return ".webm"
+		return extWebM
 	}
 }
 
 func recordingContentType(filename string) string {
 	switch filepath.Ext(filename) {
-	case ".webm":
+	case extWebM:
 		return "audio/webm"
 	case ".ogg":
 		return "audio/ogg"
@@ -119,7 +121,9 @@ func (a *App) handleUploadRecording(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A take can outgrow the default server timeouts on slow uplinks.
-	_ = http.NewResponseController(w).SetReadDeadline(time.Time{})
+	if err := http.NewResponseController(w).SetReadDeadline(time.Time{}); err != nil {
+		log.Printf("event recording read deadline error=%v", err)
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -132,24 +136,17 @@ func (a *App) handleUploadRecording(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 	takenOn := strings.TrimSpace(r.FormValue("taken_on"))
-	if _, err := time.Parse("2006-01-02", takenOn); err != nil {
+	if _, err = time.Parse("2006-01-02", takenOn); err != nil {
 		takenOn = todayStr()
 	}
-	duration, _ := strconv.Atoi(r.FormValue("duration_sec"))
+	duration, derr := strconv.Atoi(r.FormValue("duration_sec"))
+	if derr != nil {
+		duration = 0
+	}
 	if duration < 0 {
 		duration = 0
 	}
-	// A take may belong to a mock audition item; the item must be an
-	// item of this very piece, anything else is ignored.
-	var mockItem sql.NullInt64
-	if raw := strings.TrimSpace(r.FormValue("mock_item_id")); raw != "" {
-		if itemID, err := strconv.ParseInt(raw, 10, 64); err == nil {
-			var itemPiece int64
-			if err := a.db.QueryRow(`SELECT piece_id FROM mock_items WHERE id=?`, itemID).Scan(&itemPiece); err == nil && itemPiece == p.ID {
-				mockItem = sql.NullInt64{Int64: itemID, Valid: true}
-			}
-		}
-	}
+	mockItem := a.uploadMockItem(r, p.ID)
 	name, err := randomHex(12)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -180,10 +177,34 @@ func (a *App) handleUploadRecording(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	id, _ := res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	log.Printf("event recording saved id=%d piece=%d bytes=%d", id, p.ID, size)
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = fmt.Fprintf(w, `{"id":%d}`, id)
+}
+
+// uploadMockItem resolves the mock item a take claims to belong
+// to. The item must be an item of this very piece; anything else
+// is ignored.
+func (a *App) uploadMockItem(r *http.Request, pieceID int64) sql.NullInt64 {
+	var mockItem sql.NullInt64
+	raw := strings.TrimSpace(r.FormValue("mock_item_id"))
+	if raw == "" {
+		return mockItem
+	}
+	itemID, perr := strconv.ParseInt(raw, 10, 64)
+	if perr != nil {
+		return mockItem
+	}
+	var itemPiece int64
+	if err := a.db.QueryRow(`SELECT piece_id FROM mock_items WHERE id=?`, itemID).Scan(&itemPiece); err == nil && itemPiece == pieceID {
+		mockItem = sql.NullInt64{Int64: itemID, Valid: true}
+	}
+	return mockItem
 }
 
 // serveRecordingFile streams one recording with range support, so
@@ -206,7 +227,9 @@ func (a *App) serveRecordingFile(w http.ResponseWriter, r *http.Request, rec Rec
 		return
 	}
 	// Playback of a long take must not die on the server write timeout.
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
+	if err := http.NewResponseController(w).SetWriteDeadline(time.Time{}); err != nil {
+		log.Printf("event recording write deadline error=%v", err)
+	}
 	w.Header().Set("Content-Type", recordingContentType(rec.Filename))
 	http.ServeContent(w, r, rec.Filename, st.ModTime(), f)
 }

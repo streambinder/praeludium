@@ -1,11 +1,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -39,7 +42,7 @@ func freePort(t *testing.T) string {
 	return port
 }
 
-func serveHealthz(t *testing.T, status int) string {
+func serveHealthz(t *testing.T, status int) int {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -50,9 +53,13 @@ func serveHealthz(t *testing.T, status int) string {
 		w.WriteHeader(status)
 	})
 	srv := &http.Server{Handler: mux}
-	go func() { _ = srv.Serve(ln) }()
+	go func() {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Error(err)
+		}
+	}()
 	t.Cleanup(func() { srv.Close() })
-	return fmt.Sprint(ln.Addr().(*net.TCPAddr).Port)
+	return ln.Addr().(*net.TCPAddr).Port
 }
 
 func TestRunHealthcheck(t *testing.T) {
@@ -62,7 +69,11 @@ func TestRunHealthcheck(t *testing.T) {
 	if code := runHealthcheck(serveHealthz(t, http.StatusTeapot)); code != 1 {
 		t.Errorf("unhealthy server: want 1, got %d", code)
 	}
-	if code := runHealthcheck(freePort(t)); code != 1 {
+	free, err := strconv.Atoi(freePort(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := runHealthcheck(free); code != 1 {
 		t.Errorf("no server: want 1, got %d", code)
 	}
 }
@@ -99,15 +110,16 @@ func TestRunErrors(t *testing.T) {
 func TestRunServesHealthz(t *testing.T) {
 	port := freePort(t)
 	cfg := Config{DataDir: t.TempDir(), Port: port}
-	go func() { _ = run(cfg) }()
+	errCh := make(chan error, 1)
+	go func() { errCh <- run(cfg) }()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		resp, err := http.Get("http://127.0.0.1:" + port + "/healthz")
 		if err == nil {
 			body := make([]byte, 16)
-			n, _ := resp.Body.Read(body)
+			n, rerr := resp.Body.Read(body)
 			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK && string(body[:n]) == "ok\n" {
+			if resp.StatusCode == http.StatusOK && (rerr == nil || rerr == io.EOF) && string(body[:n]) == "ok\n" {
 				break
 			}
 		}

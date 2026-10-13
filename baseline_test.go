@@ -64,7 +64,7 @@ func TestValuedPieceIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := migrate(db); err != nil {
+	if err = migrate(db); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
 	today := todayStr()
@@ -76,7 +76,7 @@ func TestValuedPieceIDs(t *testing.T) {
 		`INSERT INTO pieces(id, composer, work) VALUES(5, 'E', 'W5')`,
 	}
 	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
+		if _, err = db.Exec(s); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -96,7 +96,7 @@ func TestValuedPieceIDs(t *testing.T) {
 		{4, 20, 0, ""},
 	}
 	for _, s := range sessions {
-		if _, err := db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence, note) VALUES(?,?,?,?,?)`,
+		if _, err = db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence, note) VALUES(?,?,?,?,?)`,
 			today, s.piece, s.minutes, s.conf, s.note); err != nil {
 			t.Fatal(err)
 		}
@@ -119,14 +119,14 @@ func TestLatestConfidenceBaselineZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := migrate(db); err != nil {
+	if err = migrate(db); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
-	if _, err := db.Exec(`INSERT INTO pieces(id, composer, work) VALUES(1, 'Haydn', 'Concerto')`); err != nil {
+	if _, err = db.Exec(`INSERT INTO pieces(id, composer, work) VALUES(1, 'Haydn', 'Concerto')`); err != nil {
 		t.Fatal(err)
 	}
 	today := todayStr()
-	if _, err := db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence, note) VALUES(?,1,0,0,'baseline')`, today); err != nil {
+	if _, err = db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence, note) VALUES(?,1,0,0,'baseline')`, today); err != nil {
 		t.Fatal(err)
 	}
 	a := &App{db: db}
@@ -137,7 +137,7 @@ func TestLatestConfidenceBaselineZero(t *testing.T) {
 	if !rated || conf != 0 {
 		t.Fatalf("baseline 0: want rated with conf 0, got rated=%v conf=%v", rated, conf)
 	}
-	if _, err := db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence, note) VALUES(?,1,0,0,'skipped')`, today); err != nil {
+	if _, err = db.Exec(`INSERT INTO sessions(date, piece_id, minutes, confidence, note) VALUES(?,1,0,0,'skipped')`, today); err != nil {
 		t.Fatal(err)
 	}
 	conf, rated, err = a.latestConfidence(1)

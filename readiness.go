@@ -34,7 +34,7 @@ type tempoChart struct {
 	Single    bool
 }
 
-func buildTempoChart(pts []tempoPoint, target int, hasTarget bool, lang string) tempoChart {
+func buildTempoChart(pts []tempoPoint, target int, hasTarget bool) tempoChart {
 	const (
 		plotTop = 10.0
 		plotBot = 138.0
@@ -152,22 +152,9 @@ type weakRow struct {
 	Level   int
 }
 
-func (a *App) handleReadiness(w http.ResponseWriter, r *http.Request) {
-	c, ok := a.concorsoOr404(w, r)
-	if !ok {
-		return
-	}
-	lang := langFor(r)
-	today, _ := time.Parse("2006-01-02", todayStr())
-	audDay, _ := time.Parse("2006-01-02", c.Date)
-	daysLeft := int(audDay.Sub(today).Hours() / 24)
-	data := readinessData{
-		Title: tr(lang, "ready.title"), Nav: "auditions", Audition: c,
-		DaysLeft: daysLeft, Concluded: daysLeft < 0, IsToday: daysLeft == 0,
-	}
-
-	// Coverage in the last 14 days, sessions or mocks as touches.
-	since := today.AddDate(0, 0, -13).Format("2006-01-02")
+// readinessCoverage measures how many of the audition pieces saw
+// study time or a mock in the window that starts at since.
+func (a *App) readinessCoverage(c Audition, since string) (statRow, error) {
 	var total, touched int
 	err := a.db.QueryRow(`SELECT COUNT(DISTINCT p.id),
 		COUNT(DISTINCT CASE WHEN EXISTS (
@@ -179,20 +166,119 @@ func (a *App) handleReadiness(w http.ResponseWriter, r *http.Request) {
 		FROM piece_audition pa JOIN pieces p ON p.id = pa.piece_id AND p.archived_at IS NULL
 		WHERE pa.audition_id = ?`, since, since, c.ID).Scan(&total, &touched)
 	if err != nil {
+		return statRow{}, err
+	}
+	if total == 0 {
+		return statRow{}, nil
+	}
+	pct := touched * 100 / total
+	return statRow{Name: c.Name, Pct: pct, Val: fmt.Sprintf("%d/%d · %d%%", touched, total, pct)}, nil
+}
+
+// auditionConfRows reads the dated confidence ratings of the
+// studied sessions of one audition, oldest first.
+func (a *App) auditionConfRows(auditionID int64) ([]confSession, error) {
+	srows, err := a.db.Query(`SELECT s.date, s.confidence FROM sessions s
+		JOIN piece_audition pa ON pa.piece_id = s.piece_id
+		WHERE pa.audition_id = ? AND s.minutes > 0 AND s.confidence > 0 ORDER BY s.date`, auditionID)
+	if err != nil {
+		return nil, err
+	}
+	defer srows.Close()
+	var confRows []confSession
+	for srows.Next() {
+		var cs confSession
+		if err := srows.Scan(&cs.Date, &cs.Conf); err != nil {
+			return nil, err
+		}
+		confRows = append(confRows, cs)
+	}
+	if err := srows.Err(); err != nil {
+		return nil, err
+	}
+	return confRows, nil
+}
+
+// readinessTempo counts the pieces with a target tempo and how
+// many of them have a recorded take at or above the target.
+func (a *App) readinessTempo(pieces []Piece) (count, at int, err error) {
+	for _, p := range pieces {
+		if !p.TargetBPM.Valid {
+			continue
+		}
+		count++
+		if bpm, ok, berr := a.latestBPM(p.ID); berr == nil && ok && bpm >= int(p.TargetBPM.Int64) {
+			at++
+		} else if berr != nil {
+			return 0, 0, berr
+		}
+	}
+
+	return count, at, nil
+}
+
+// readinessStudyTime totals the study minutes of one audition,
+// all time and inside the last seven days.
+func (a *App) readinessStudyTime(auditionID int64, weekAgo string) (total, last7 int, err error) {
+	err = a.db.QueryRow(`SELECT COALESCE(SUM(s.minutes), 0),
+		COALESCE(SUM(CASE WHEN s.date >= ? THEN s.minutes ELSE 0 END), 0)
+		FROM sessions s JOIN piece_audition pa ON pa.piece_id = s.piece_id
+		WHERE pa.audition_id = ? AND s.minutes > 0`, weekAgo, auditionID).Scan(&total, &last7)
+	return total, last7, err
+}
+
+// readinessWeakest stamps preparation levels on the pieces and
+// returns the five weakest as the attack list.
+func (a *App) readinessWeakest(pieces []Piece) ([]weakRow, error) {
+	if err := a.stampPrepLevels(pieces); err != nil {
+		return nil, err
+	}
+	sort.Slice(pieces, func(i, j int) bool { return pieces[i].Prep < pieces[j].Prep })
+	var weakest []weakRow
+	for i, p := range pieces {
+		if i >= 5 {
+			break
+		}
+		weakest = append(weakest, weakRow{
+			PieceID: p.ID, Title: p.Composer + " — " + p.Work,
+			Prep: int(p.Prep*100 + 0.5), Level: p.Level,
+		})
+	}
+	return weakest, nil
+}
+
+func (a *App) handleReadiness(w http.ResponseWriter, r *http.Request) {
+	c, ok := a.concorsoOr404(w, r)
+	if !ok {
+		return
+	}
+	lang := langFor(r)
+	today, terr := time.Parse("2006-01-02", todayStr())
+	if terr != nil {
+		today = time.Time{}
+	}
+	audDay, derr := time.Parse("2006-01-02", c.Date)
+	if derr != nil {
+		audDay = time.Time{}
+	}
+	daysLeft := int(audDay.Sub(today).Hours() / 24)
+	data := readinessData{
+		Title: tr(lang, "ready.title"), Nav: navAuditions, Audition: c,
+		DaysLeft: daysLeft, Concluded: daysLeft < 0, IsToday: daysLeft == 0,
+	}
+
+	// Coverage in the last 14 days, sessions or mocks as touches.
+	since := today.AddDate(0, 0, -13).Format("2006-01-02")
+	coverage, err := a.readinessCoverage(c, since)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if total > 0 {
-		pct := touched * 100 / total
-		data.Coverage = statRow{Name: c.Name, Pct: pct, Val: fmt.Sprintf("%d/%d · %d%%", touched, total, pct)}
-	}
+	data.Coverage = coverage
 
 	// Study time for this audition, total and last 7 days.
 	weekAgo := today.AddDate(0, 0, -6).Format("2006-01-02")
-	if err := a.db.QueryRow(`SELECT COALESCE(SUM(s.minutes), 0),
-		COALESCE(SUM(CASE WHEN s.date >= ? THEN s.minutes ELSE 0 END), 0)
-		FROM sessions s JOIN piece_audition pa ON pa.piece_id = s.piece_id
-		WHERE pa.audition_id = ? AND s.minutes > 0`, weekAgo, c.ID).Scan(&data.TotalMinutes, &data.Last7Minutes); err != nil {
+	if data.TotalMinutes, data.Last7Minutes, err = a.readinessStudyTime(c.ID, weekAgo); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -200,25 +286,8 @@ func (a *App) handleReadiness(w http.ResponseWriter, r *http.Request) {
 	data.Last7Label = dur(data.Last7Minutes)
 
 	// Mean confidence trend of this audition's studied sessions.
-	srows, err := a.db.Query(`SELECT s.date, s.confidence FROM sessions s
-		JOIN piece_audition pa ON pa.piece_id = s.piece_id
-		WHERE pa.audition_id = ? AND s.minutes > 0 AND s.confidence > 0 ORDER BY s.date`, c.ID)
+	confRows, err := a.auditionConfRows(c.ID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	var confRows []confSession
-	for srows.Next() {
-		var cs confSession
-		if err := srows.Scan(&cs.Date, &cs.Conf); err != nil {
-			srows.Close()
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		confRows = append(confRows, cs)
-	}
-	srows.Close()
-	if err := srows.Err(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -227,24 +296,17 @@ func (a *App) handleReadiness(w http.ResponseWriter, r *http.Request) {
 		data.HasConf = true
 	}
 
-	// Tempo readiness, only over pieces that carry a target.
 	pieces, err := a.listPieces(c.ID, "", false, "")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	for _, p := range pieces {
-		if !p.TargetBPM.Valid {
-			continue
-		}
-		data.TempoCount++
-		if bpm, ok, err := a.latestBPM(p.ID); err == nil && ok && bpm >= int(p.TargetBPM.Int64) {
-			data.TempoAt++
-		} else if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	tempoCount, tempoAt, terr2 := a.readinessTempo(pieces)
+	if terr2 != nil {
+		http.Error(w, terr2.Error(), http.StatusInternalServerError)
+		return
 	}
+	data.TempoCount, data.TempoAt = tempoCount, tempoAt
 
 	// Mocks of this audition.
 	mocks, err := a.auditionMocks(c.ID)
@@ -259,20 +321,12 @@ func (a *App) handleReadiness(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Weakest pieces first: the attack list.
-	if err := a.stampPrepLevels(pieces); err != nil {
+	weakest, err := a.readinessWeakest(pieces)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	sort.Slice(pieces, func(i, j int) bool { return pieces[i].Prep < pieces[j].Prep })
-	for i, p := range pieces {
-		if i >= 5 {
-			break
-		}
-		data.Weakest = append(data.Weakest, weakRow{
-			PieceID: p.ID, Title: p.Composer + " — " + p.Work,
-			Prep: int(p.Prep*100 + 0.5), Level: p.Level,
-		})
-	}
+	data.Weakest = weakest
 
 	a.render(w, r, "readiness.html", data)
 }
