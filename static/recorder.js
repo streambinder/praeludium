@@ -39,6 +39,7 @@
     var recorder = null;
     var chunks = [];
     var blob = null;
+    var previewURL = null;
     var startedAt = 0;
     var duration = 0;
     var timer = null;
@@ -83,7 +84,11 @@
     function reset() {
       stopMeter();
       blob = null;
+      preview.pause();
+      if (previewURL) URL.revokeObjectURL(previewURL);
+      previewURL = null;
       preview.removeAttribute("src");
+      preview.load();
       preview.classList.add("hidden");
       actions.classList.add("hidden");
       timeEl.textContent = "0:00";
@@ -109,7 +114,8 @@
             blob = new Blob(chunks, {
               type: recorder.mimeType || "audio/webm",
             });
-            preview.src = URL.createObjectURL(blob);
+            previewURL = URL.createObjectURL(blob);
+            preview.src = previewURL;
             preview.classList.remove("hidden");
             actions.classList.remove("hidden");
             if (stream)
