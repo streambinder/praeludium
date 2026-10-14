@@ -104,3 +104,35 @@ jobs:
             ghcr.io/${{ github.repository }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+  deploy:
+    name: deploy
+    needs: [docker]
+    if: github.ref == 'refs/heads/master'
+    runs-on: [self-hosted, lobster]
+    environment: production
+    timeout-minutes: 20
+    env:
+      DOCKER_HOST: unix:///run/podman/podman.sock
+    steps:
+      - name: Back up, pull the image and restart the service
+        run: |
+          docker run --rm --privileged --pid=host \
+            docker.io/library/alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8 \
+            nsenter -t 1 -m -u -i -n -p -- sh -euc '
+              /etc/cron.daily/backup-praeludium
+              podman pull ghcr.io/${{ github.repository }}:latest
+              systemctl restart praeludium.service
+            '
+      - name: Check praeludium answers
+        run: |
+          docker run --rm --privileged --pid=host \
+            docker.io/library/alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8 \
+            nsenter -t 1 -m -u -i -n -p -- sh -euc '
+              for attempt in $(seq 1 30); do
+                if curl -fsS -o /dev/null http://127.0.0.1:65530/diary; then
+                  exit 0
+                fi
+                sleep 2
+              done
+              exit 1
+            '
