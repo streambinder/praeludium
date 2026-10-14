@@ -3,5 +3,5 @@
     <stop offset="0" stop-color="#6e4522"/><stop offset="1" stop-color="#a06a2c"/>
   </linearGradient></defs>
   <rect width="64" height="64" rx="14" fill="url(#g)"/>
-  <text x="32" y="45" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="38" fill="#f6f3ec">S</text>
+  <text x="32" y="43" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="40" fill="#f6f3ec">æ</text>
 </svg>
