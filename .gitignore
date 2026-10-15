@@ -1,4 +1,5 @@
 /praeludium
+/target
 *.db
 *.db-wal
 *.db-shm

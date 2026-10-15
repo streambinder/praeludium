@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+<span class="overline">{{ t("mock.title") }} · {{ dateIT(Mock.Date) }}{% if Mock.RoundName %} · {{ Mock.RoundName }}{% endif %}</span>
+<h1>{{ Audition.Name }}</h1>
+<p class="meta">{{ t("mock.progress", Mock.Rated, Mock.Items | length) }}</p>
+</div>
+
+{% if Current %}
+<section class="panel reveal">
+<div class="section-head"><h2>{{ Current.Title }}</h2></div>
+{% if Current.Movement %}<p class="meta">{{ Current.Movement }}</p>{% endif %}
+{% if Current.Excerpt %}<p>{{ Current.Excerpt }}</p>{% endif %}
+{% if Mock.RecordTake %}{% include "recorder.html" %}{% endif %}
+<form method="post" action="/auditions/{{ Audition.ID }}/mock/{{ Mock.ID }}/rate" class="mock-rate">
+<input type="hidden" name="item_id" value="{{ Current.ID }}">
+<label>{{ t("mock.rate") }} <input type="range" name="confidence" min="1" max="5" step="1" value="3" oninput="this.nextElementSibling.textContent=this.value"> <output>3</output></label>
+<label>{{ t("field.note") }} <input type="text" name="note"></label>
+<div class="row btns"><button type="submit">{% if LastStep %}{{ t("mock.finish") }}{% else %}{{ t("mock.next") }}{% endif %}</button></div>
+</form>
+</section>
+{% else %}
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("mock.done") }}</h2><span class="meta">{{ t("mock.mean", MeanLabel) }}/5</span></div>
+<div class="stack">
+{% for it in Mock.Items %}
+<article class="card reveal">
+<div class="card-head"><strong>{{ it.Position }}. <a class="card-link" href="/diary/piece/{{ it.PieceID }}">{{ it.Title }}</a></strong>
+<span class="badge">{{ t("session.security", it.Confidence) }}</span></div>
+{% if it.Note %}<div class="meta">{{ it.Note }}</div>{% endif %}
+{% for r in ItemRecordings[it.ID|string] %}<audio controls preload="none" src="/recordings/{{ r.Rec.ID }}/audio"></audio>{% endfor %}
+</article>
+{% endfor %}
+</div>
+<form method="post" action="/auditions/{{ Audition.ID }}/mock/{{ Mock.ID }}/delete" class="inline"><button class="secondary" type="submit">{{ t("mock.delete") }}</button></form>
+</section>
+<p><a href="/auditions/{{ Audition.ID }}">&larr; {{ t("detail.back_to") }}</a></p>
+{% endif %}
+{% endblock %}

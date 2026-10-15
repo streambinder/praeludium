@@ -1,0 +1,67 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+<span class="overline">{{ t("settings.overline") }}</span>
+<h1>{{ t("nav.settings") }}</h1>
+<p class="meta">{{ t("settings.subtitle") }}</p>
+</div>
+
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("settings.formula_title") }}</h2></div>
+<p>{{ t("settings.formula_pre") }}</p>
+<p class="formula">{{ t("settings.formula_line") }}</p>
+<ul>
+<li><strong>{{ t("score.base_name") }}</strong> = {{ t("settings.base_desc") }}</li>
+<li><strong>{{ t("score.urgency_name") }}</strong> = {{ t("settings.urgency_desc", f1(Coeffs.UrgencyK), f1(Coeffs.UrgencyHorizon)) }}</li>
+<li><strong>{{ t("score.need_name") }}</strong> = {{ t("settings.need_desc") }}</li>
+<li><strong>{{ t("score.recency_name") }}</strong> = {{ t("settings.recency_desc", f1(Coeffs.RecencyCap)) }}</li>
+</ul>
+<p class="meta">{{ t("settings.top8_note") }}</p>
+</section>
+
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("settings.coeffs") }}</h2></div>
+<form method="post" action="/settings">
+<div class="row">
+<label>{{ t("settings.k") }} <input type="number" name="urgency_k" step="0.1" min="0.1" value="{{ g(Coeffs.UrgencyK) }}" required></label>
+<label>{{ t("settings.horizon") }} <input type="number" name="urgency_horizon" step="1" min="1" value="{{ g(Coeffs.UrgencyHorizon) }}" required></label>
+</div>
+<label>{{ t("settings.cap") }} <input type="number" name="recency_cap" step="0.1" min="0.1" value="{{ g(Coeffs.RecencyCap) }}" required></label>
+<div class="row">
+<label>{{ t("settings.diff_horizon") }} <input type="number" name="diff_horizon" step="0.05" min="0.05" value="{{ g(Coeffs.DiffHorizon) }}" required></label>
+<label>{{ t("settings.diff_boost") }} <input type="number" name="diff_boost" step="0.025" min="0.025" value="{{ g(Coeffs.DiffBoost) }}" required></label>
+</div>
+<button type="submit">{{ t("common.save") }}</button>
+</form>
+</section>
+
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("settings.language_title") }}</h2></div>
+<p class="meta">{{ t("settings.language_note") }}</p>
+<form method="post" action="/settings/language">
+<div class="row">
+<label>{{ t("settings.language_title") }} <select name="lang">
+<option value="auto" {% if LangChoice == "auto" %}selected{% endif %}>{{ t("settings.lang_auto") }}</option>
+<option value="en" {% if LangChoice == "en" %}selected{% endif %}>English</option>
+<option value="it" {% if LangChoice == "it" %}selected{% endif %}>Italiano</option>
+<option value="es" {% if LangChoice == "es" %}selected{% endif %}>Español</option>
+<option value="fr" {% if LangChoice == "fr" %}selected{% endif %}>Français</option>
+<option value="de" {% if LangChoice == "de" %}selected{% endif %}>Deutsch</option>
+<option value="pt" {% if LangChoice == "pt" %}selected{% endif %}>Português</option>
+</select></label>
+</div>
+<p class="meta">{{ t("settings.language_current", LangName) }}</p>
+<button type="submit">{{ t("common.save") }}</button>
+</form>
+{% if RecInfo %}<p class="meta">{{ RecInfo }}</p>{% endif %}
+<p class="meta">{{ t("settings.geoip_credit") }}</p>
+</section>
+
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("settings.priorities_title") }}</h2></div>
+<ul class="timeline">
+{% for c in Auditions %}<li><span class="when">{{ c.Name }}</span> {{ t("settings.priority_word") }} <strong>{{ c.Weight }}</strong> · {{ t("settings.audition_word") }} {{ dateIT(c.Date) }}</li>{% endfor %}
+</ul>
+<p><a href="/auditions">{{ t("settings.edit_auditions") }}</a></p>
+</section>
+{% endblock %}

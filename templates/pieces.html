@@ -1,0 +1,71 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+<span class="overline">{{ t("pieces.overline") }}</span>
+<h1>{{ t("pieces.title") }}</h1>
+<p class="meta">{{ tp("pieces.subtitle", Pieces | length) }}</p>
+</div>
+
+<section class="panel reveal">
+<details>
+<summary>{{ t("pieces.add_title") }}</summary>
+<div class="details-body"><div>
+<form method="post" action="/pieces">
+<div class="row">
+<label>{{ t("field.composer") }} <input type="text" name="composer" required></label>
+<label>{{ t("field.work") }} <input type="text" name="work" required></label>
+</div>
+<div class="row">
+<label>{{ t("field.movement") }} <input type="text" name="movement" placeholder="{{ t("field.movement_ph") }}"></label>
+<label>{{ t("field.kind") }}
+<select name="kind">
+<option value="excerpt">{{ t("kind.excerpt_long") }}</option>
+<option value="solo">{{ t("kind.solo_long") }}</option>
+</select></label>
+</div>
+<label>{{ t("field.difficulty") }} <input type="range" name="difficulty" min="1" max="5" step="1" value="3" oninput="this.nextElementSibling.textContent=this.value"> <output>3</output></label>
+<label>{{ t("field.target_bpm") }} <input type="number" name="target_bpm" min="20" max="400"></label>
+<fieldset><legend>{{ t("nav.auditions") }}</legend>
+{% for c in Auditions %}<div class="link-excerpt"><label class="check"><input type="checkbox" name="audition" value="{{ c.ID }}"> {{ c.Name }}</label> <input type="text" name="excerpt-{{ c.ID }}" placeholder="{{ t("field.excerpt_ph") }}"></div>{% endfor %}
+</fieldset>
+<button type="submit">{{ t("common.add") }}</button>
+</form>
+</div></div>
+</details>
+</section>
+
+<form method="get" action="/pieces" class="filters panel reveal">
+<label class="search">{{ t("pieces.search") }} <input type="search" name="q" value="{{ Search }}" placeholder="{{ t("pieces.search_ph") }}" enterkeyhint="search" onchange="this.form.submit()"></label>
+<label>{{ t("pieces.filter_audition") }}
+<select name="audition" onchange="this.form.submit()">
+<option value="0">{{ t("filter.all") }}</option>
+{% for c in Auditions %}<option value="{{ c.ID }}" {% if FilterAudition == c.ID %}selected{% endif %}>{{ c.Name }}</option>{% endfor %}
+</select></label>
+<label>{{ t("field.kind") }}
+<select name="kind" onchange="this.form.submit()">
+<option value="">{{ t("filter.all") }}</option>
+<option value="excerpt" {% if FilterKind == "excerpt" %}selected{% endif %}>{{ t("kind.excerpts_plural") }}</option>
+<option value="solo" {% if FilterKind == "solo" %}selected{% endif %}>{{ t("kind.solos_plural") }}</option>
+</select></label>
+<label class="check"><input type="checkbox" name="archiviati" value="1" {% if ShowArchived %}checked{% endif %} onchange="this.form.submit()"> {{ t("pieces.show_archived") }}</label>
+</form>
+
+<div class="stack">
+{% for p in Pieces %}
+<article class="card reveal {% if p.Archived %}archived{% endif %}">
+<span class="prep-pin pin-corner" tabindex="0" aria-label="{{ t("prep.label", pct(p.Prep)) }}"><span class="prep-dot lv{{ p.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(p.Prep)) }}</span></span>
+<div class="card-head">
+<strong><a class="card-link" href="/diary/piece/{{ p.ID }}">{{ p.Composer }} — {{ p.Work }}</a></strong>
+{% if p.Archived %}<span class="badge muted">{{ t("pieces.archived_badge") }}</span>
+{% elif not p.HasActive %}<span class="badge muted">{{ t("pieces.no_active") }}</span>{% endif %}
+</div>
+<div class="meta movement-row"><span class="badge kind">{{ kindLabel(p.Kind) }}</span>{% if p.Movement %}<span>{{ p.Movement }}</span>{% endif %}</div>
+{% if p.Auditions %}<div class="chips">
+{% for c in p.Auditions %}<span class="chip{% if c.Archived %} muted{% endif %}">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}
+</div>{% endif %}
+</article>
+{% else %}
+<p class="empty">{{ t("pieces.empty_filtered") }}</p>
+{% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,348 @@
+{% extends "layout.html" %}
+{% block content %}
+{% if not HasAvailability %}
+<section class="hero reveal">
+<span class="overline">{{ t("today.overline") }}</span>
+<h1>{{ dateIT(Date) }}</h1>
+<p class="hero-sub">{{ t("today.intro") }}</p>
+</section>
+{% include "readiness_partial.html" %}
+<section class="panel reveal">
+<h2>{{ t("today.what") }}</h2>
+{% include "avail_form.html" %}
+</section>
+{% else %}
+<section class="hero reveal">
+<span class="overline">{{ t("today.overline") }}</span>
+<h1>{{ dateIT(Date) }}</h1>
+<div class="hero-stats">
+<div class="hero-stat"><span class="num" data-count="{{ Budget }}">{{ dur(Budget) }}</span><span class="lbl">{{ t("today.of_budget") }}</span></div>
+<div class="hero-stat"><span class="num" data-count="{{ PlanTotal }}">{{ PlanTotal }}</span><span class="lbl">{{ t("today.in_plan") }}</span></div>
+<div class="hero-stat"><span class="num" data-count="{{ Logged }}">{{ dur(Logged) }}</span><span class="lbl">{{ t("today.logged_today") }}</span></div>
+</div>
+<div class="budget-bar" role="img" aria-label="{{ t("today.bar_aria", dur(Logged), dur(Budget)) }}"><span style="--w: {{ BudgetPct }}%"></span></div>
+<p class="hero-bar-note">{{ t("today.bar_note", LoggedPct) }}</p>
+</section>
+
+{% include "readiness_partial.html" %}
+
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("today.availability") }}</h2></div>
+<ul class="windows">
+{% for v in Free %}<li class="free">{{ hhmm(v.StartMin) }}–{{ hhmm(v.EndMin) }}{% if v.Label %} · {{ v.Label }}{% endif %}
+<form method="post" action="/availability/delete" class="inline"><input type="hidden" name="id" value="{{ v.ID }}"><button class="link" type="submit" aria-label="{{ t("common.delete_window") }}">✕</button></form></li>{% endfor %}
+{% for v in Busy %}<li class="busy">{{ hhmm(v.StartMin) }}–{{ hhmm(v.EndMin) }}{% if v.Label %} · {{ v.Label }}{% endif %} <em>{{ t("today.busy") }}</em>
+<form method="post" action="/availability/delete" class="inline"><input type="hidden" name="id" value="{{ v.ID }}"><button class="link" type="submit" aria-label="{{ t("common.delete_window") }}">✕</button></form></li>{% endfor %}
+</ul>
+<details><summary>{{ t("today.add_window") }}</summary><div class="details-body">{% include "avail_form.html" %}</div></details>
+</section>
+{% endif %}
+
+<section class="panel reveal">
+<details><summary>{{ t("today.manual") }}</summary>
+<div class="details-body">
+<form method="post" action="/session" class="checkin">
+<div class="timer" data-manual="1" data-day="{{ Date }}">
+<span class="timer-display">0:00</span>
+<button type="button" class="secondary timer-toggle">{{ t("timer.start") }}</button>
+<button type="button" class="secondary timer-done" hidden>{{ t("timer.use") }}</button>
+</div>
+<div class="row">
+<label>{{ t("today.piece") }} <select name="piece_id" required>
+<option value="">{{ t("today.choose") }}</option>
+{% for p in Pieces %}<option value="{{ p.ID }}">{{ p.Composer }} — {{ p.Work }}{% if p.Movement %} ({{ p.Movement }}){% endif %}</option>{% endfor %}
+</select></label>
+<label>{{ t("today.minutes") }} <input type="number" name="minutes" value="10" min="0" max="600"></label>
+</div>
+<div class="row">
+<label>{{ t("field.security") }} <input type="range" name="confidence" min="1" max="5" step="1" value="3" oninput="this.nextElementSibling.textContent=this.value+'/5'"> <output>3/5</output></label>
+<label>{{ t("field.metronome") }} <input type="number" name="bpm" min="1" max="400" placeholder="{{ t("field.optional") }}"></label>
+</div>
+<div class="row btns">
+<button type="submit">{{ t("today.log") }}</button>
+</div>
+</form>
+</div></details>
+</section>
+
+<script>
+var L = { neverTouched: {{ t("js.never_touched") | tojson | safe }}, saved: {{ t("js.saved") | tojson | safe }}, errorRetry: {{ t("js.error_retry") | tojson | safe }}, progressFmt: {{ t("today.x_of_y") | tojson | safe }}, start: {{ t("timer.start") | tojson | safe }}, pause: {{ t("timer.pause") | tojson | safe }}, resume: {{ t("timer.resume") | tojson | safe }}, skipConfirm: {{ t("today.skip_confirm") | tojson | safe }} };
+</script>
+{% if Baseline %}
+<section id="baseline" data-done="{{ BaselineDone }}" data-total="{{ BaselineTotal }}">
+<div class="section-head"><h2>{{ t("today.baseline_title") }}</h2><span class="meta"><span id="base-progress">{{ t("today.x_of_y", BaselineDone, BaselineTotal) }}</span> {{ t("today.pieces_declared") }}</span></div>
+<p class="empty-note">{{ t("today.baseline_intro") }}</p>
+{% for bp in Baseline %}
+<article class="card base-card reveal">
+<div class="card-head"><strong><a class="card-link" href="/diary/piece/{{ bp.ID }}">{{ bp.Composer }} — {{ bp.Work }}</a></strong></div>
+<div class="meta movement-row"><span class="badge kind">{{ kindLabel(bp.Kind) }}</span>{% if bp.Movement %}<span>{{ bp.Movement }}</span>{% endif %}</div>
+{% if bp.Auditions %}<div class="chips">{% for c in bp.Auditions %}<span class="chip">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}</div>{% endif %}
+<div class="diff-row"><label>{{ t("field.security") }} <input type="range" class="base-slider" data-id="{{ bp.ID }}" min="0" max="5" step="1" value="0"> <output>{{ t("today.to_declare") }}</output></label><button type="button" class="base-save" data-id="{{ bp.ID }}" disabled>{{ t("common.save") }}</button><span class="diff-state" aria-live="polite"></span></div>
+</article>
+{% endfor %}
+</section>
+<script>
+(function() {
+  var section = document.getElementById('baseline');
+  var baseDone = parseInt(section.dataset.done, 10) || 0;
+  var baseTotal = parseInt(section.dataset.total, 10) || 0;
+  var saved = 0;
+  function label(v) { return v === '0' ? L.neverTouched : v + '/5'; }
+  document.querySelectorAll('.base-slider').forEach(function(s) {
+    var out = s.parentElement.querySelector('output');
+    var row = s.parentElement.parentElement;
+    var state = row.querySelector('.diff-state');
+    var btn = row.querySelector('.base-save');
+    var card = s.closest('.base-card');
+    s.addEventListener('input', function() { out.textContent = label(s.value); btn.disabled = false; });
+    btn.addEventListener('click', function() {
+      btn.disabled = true;
+      fetch('/pieces/' + s.dataset.id + '/baseline', {
+        method: 'POST',
+        body: new URLSearchParams({confidence: s.value})
+      }).then(function(r) {
+        if (!r.ok) { state.textContent = L.errorRetry; btn.disabled = false; return; }
+        state.textContent = '✓ ' + L.saved;
+        card.classList.add('saved');
+        s.disabled = true;
+        saved++;
+        var prog = document.getElementById('base-progress');
+        if (prog) prog.textContent = L.progressFmt.replace('%d', baseDone + saved).replace('%d', baseTotal);
+        if (document.querySelectorAll('.base-card:not(.saved)').length === 0) location.reload();
+      }).catch(function() {
+        state.textContent = L.errorRetry;
+        btn.disabled = false;
+      });
+    });
+  });
+})();
+</script>
+{% else %}
+{% if HasAvailability %}
+{% if NoBudget %}
+<section class="panel reveal"><p class="empty">{{ t("today.no_budget") }}</p></section>
+{% elif not Items %}
+<section class="panel reveal"><p class="empty">{{ t("today.empty_plan_pre") }}<a href="/pieces">{{ t("nav.pieces") }}</a>{{ t("today.empty_plan_post") }}</p></section>
+{% else %}
+{% if OpenCount %}
+<section>
+<div class="section-head"><h2>{{ t("today.plan_title") }}</h2><span class="meta">{{ tp("today.plan_meta", OpenCount) }}</span></div>
+{% for it in Items %}{% if not it.Practiced %}
+<article class="card plan-card reveal">
+<span class="plan-rank" aria-hidden="true"></span>
+<span class="prep-pin pin-corner" tabindex="0" aria-label="{{ t("prep.label", pct(it.Piece.Prep)) }}"><span class="prep-dot lv{{ it.Piece.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(it.Piece.Prep)) }}</span></span>
+<div class="card-head">
+<strong><a class="card-link" href="/diary/piece/{{ it.Piece.ID }}">{{ it.Piece.Composer }} — {{ it.Piece.Work }}</a></strong>
+{% if it.Logged %}<span class="badge done">✓ {{ dur(it.Logged) }}</span>{% endif %}
+</div>
+<div class="meta movement-row"><span class="badge kind">{{ kindLabel(it.Piece.Kind) }}</span>{% if it.Piece.Movement %}<span>{{ it.Piece.Movement }}</span>{% endif %}</div>
+{% if it.Upcoming %}<div class="chips">{% for c in it.Upcoming %}<span class="chip">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}</div>{% endif %}
+<div class="slot">{{ t("today.suggested", dur(it.Minutes)) }}</div>
+<details class="reason"><summary>{{ t("today.why", f1(it.Score)) }}</summary>
+<div class="details-body">
+<ul>
+<li><strong>{{ t("score.base_name") }} {{ f1(it.Base) }}</strong> — {{ tp("score.auditions_count", it.Upcoming | length) }}
+{% for c in it.Upcoming %}{% if not loop.first %}, {% endif %}{{ c.Name }} ({{ t("score.priority", c.Weight) }}){% endfor %}</li>
+<li><strong>{{ t("score.urgency_name") }} {{ f1(it.Urgency) }}</strong> — {{ t("score.urgency_why", it.Days, it.Upcoming[0].Name) }}</li>
+<li><strong>{{ t("score.need_name") }} {{ f1(it.Need) }}</strong> — {{ t("score.need_why", confLabel(it.Conf, it.ConfRated)) }}</li>
+<li><strong>{{ t("score.recency_name") }} {{ f1(it.Recency) }}</strong> — {{ sinceLabel(it.Since, it.SinceNever) }}</li>
+{% if it.Diff > 1.0 %}<li><strong>{{ t("score.difficulty_name") }} ×{{ f1(it.Diff) }}</strong> — {{ t("score.difficulty_why", it.Piece.Difficulty) }}</li>{% endif %}
+{% if it.Rest < 1.0 %}<li><strong>{{ t("score.rest_name") }} ×{{ f1(it.Rest) }}</strong> — {{ t("score.rest_why") }}</li>{% endif %}
+</ul>
+<p class="formula">{{ t("score.formula") }}{{ f1(it.Base) }} × {{ f1(it.Urgency) }} × {{ f1(it.Need) }} × {{ f1(it.Recency) }}{% if it.Diff > 1.0 %} × {{ f1(it.Diff) }}{% endif %}{% if it.Rest < 1.0 %} × {{ f1(it.Rest) }}{% endif %} = <strong>{{ f1(it.Score) }}</strong></p>
+</div>
+</details>
+<form method="post" class="checkin">
+<input type="hidden" name="piece_id" value="{{ it.Piece.ID }}">
+<div class="timer" data-piece="{{ it.Piece.ID }}" data-day="{{ Date }}" data-suggested="{{ it.Minutes }}">
+<span class="timer-display">0:00</span>
+<button type="button" class="secondary timer-toggle">{{ t("timer.start") }}</button>
+<button type="button" class="secondary timer-done" hidden>{{ t("timer.use") }}</button>
+</div>
+<div class="row">
+<label>{{ t("today.minutes") }} <input type="number" name="minutes" value="{{ it.Minutes }}" min="0" max="600"></label>
+<label>{{ t("field.security") }} <input type="range" name="confidence" min="1" max="5" step="1" value="{{ f0(it.Conf) }}" oninput="this.nextElementSibling.textContent=this.value+'/5'"> <output>{{ f0(it.Conf) }}/5</output></label>
+</div>
+<label>{{ t("field.metronome") }} <input type="number" name="bpm" min="1" max="400" placeholder="{{ t("field.optional") }}"></label>
+<label>{{ t("field.note") }} <input type="text" name="note" placeholder="{{ t("today.note_ph") }}"></label>
+<div class="row btns">
+<button type="submit" formaction="/session">{{ t("today.log") }}</button>
+<button type="submit" formaction="/session/skip" class="secondary skip-btn">{{ t("today.skip") }}</button>
+</div>
+</form>
+</article>
+{% endif %}{% endfor %}
+</section>
+{% endif %}
+{% endif %}
+{% endif %}
+{% endif %}
+{% if DoneCount or Skipped %}
+<section>
+<div class="section-head"><h2>{{ t("today.done_skipped") }}</h2><span class="meta">{{ tp("today.done_count", DoneCount) }}{% if Skipped %} · {{ tp("today.skipped_count", Skipped | length) }}{% endif %}</span></div>
+{% for it in Items %}{% if it.Practiced %}
+<article class="card plan-card done-card reveal">
+<span class="badge done done-corner">✓ {{ dur(it.Logged) }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(it.Piece.Prep)) }}"><span class="prep-dot lv{{ it.Piece.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(it.Piece.Prep)) }}</span></span></span>
+<div class="card-head">
+<strong><a class="card-link" href="/diary/piece/{{ it.Piece.ID }}">{{ it.Piece.Composer }} — {{ it.Piece.Work }}</a></strong>
+</div>
+<div class="meta movement-row"><span class="badge kind">{{ kindLabel(it.Piece.Kind) }}</span>{% for c in it.Upcoming %}<span class="chip">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}</div>
+</article>
+{% endif %}{% endfor %}
+{% for e in ExtraDone %}
+<article class="card plan-card done-card reveal">
+<span class="badge done done-corner">✓ {{ dur(e.Logged) }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(e.P.Prep)) }}"><span class="prep-dot lv{{ e.P.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(e.P.Prep)) }}</span></span></span>
+<div class="card-head">
+<strong><a class="card-link" href="/diary/piece/{{ e.P.ID }}">{{ e.P.Composer }} — {{ e.P.Work }}</a></strong>
+</div>
+<div class="meta movement-row"><span class="badge kind">{{ kindLabel(e.P.Kind) }}</span>{% for c in e.P.Auditions %}<span class="chip">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}</div>
+</article>
+{% endfor %}
+{% for e in Skipped %}
+<article class="card plan-card skipped-card reveal">
+<span class="badge muted done-corner">{% if e.Auto %}{{ t("today.skipped_plan_badge") }}{% else %}{{ t("today.skipped_badge") }}{% endif %}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(e.P.Prep)) }}"><span class="prep-dot lv{{ e.P.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(e.P.Prep)) }}</span></span></span>
+<div class="card-head">
+<strong><a class="card-link" href="/diary/piece/{{ e.P.ID }}">{{ e.P.Composer }} — {{ e.P.Work }}</a></strong>
+</div>
+<div class="meta movement-row"><span class="badge kind">{{ kindLabel(e.P.Kind) }}</span>{% for c in e.P.Auditions %}<span class="chip">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}</div>
+</article>
+{% endfor %}
+</section>
+{% endif %}
+<script>
+(function() {
+  var timers = [];
+  var bellCtx = null;
+  function ensureBell() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!bellCtx) bellCtx = new AC();
+      if (bellCtx.state === 'suspended') bellCtx.resume();
+    } catch (e) {}
+  }
+  function strikeBell(delay, vol) {
+    var t0 = bellCtx.currentTime + delay;
+    var master = bellCtx.createGain();
+    master.gain.setValueAtTime(vol, t0);
+    master.gain.exponentialRampToValueAtTime(0.0001, t0 + 3);
+    master.connect(bellCtx.destination);
+    [[1, 1], [2.02, 0.55], [2.74, 0.35], [3.76, 0.22], [5.4, 0.1]].forEach(function(p) {
+      var osc = bellCtx.createOscillator();
+      var g = bellCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 659.25 * p[0];
+      g.gain.value = p[1];
+      osc.connect(g);
+      g.connect(master);
+      osc.start(t0);
+      osc.stop(t0 + 3);
+    });
+  }
+  // The bell rings twice when a running plan timer reaches the
+  // suggested minutes of the piece.
+  function bell() {
+    if (!bellCtx) return;
+    try {
+      if (bellCtx.state === 'suspended') bellCtx.resume();
+      strikeBell(0, 0.22);
+      strikeBell(1.5, 0.14);
+    } catch (e) {}
+  }
+  function fmt(ms) {
+    var s = Math.floor(ms / 1000);
+    var m = Math.floor(s / 60);
+    var r = s % 60;
+    return m + ':' + (r < 10 ? '0' : '') + r;
+  }
+  document.querySelectorAll('.timer').forEach(function(el) {
+    var display = el.querySelector('.timer-display');
+    var toggle = el.querySelector('.timer-toggle');
+    var done = el.querySelector('.timer-done');
+    var form = el.closest('form');
+    var select = el.dataset.manual ? form.querySelector('select[name="piece_id"]') : null;
+    function pieceId() { return select ? select.value : el.dataset.piece; }
+    var key = null;
+    var state = { acc: 0, since: 0 };
+    var targetMs = (parseInt(el.dataset.suggested, 10) || 0) * 60000;
+    var seenBelow = false;
+    function load() {
+      var p = pieceId();
+      key = p ? 'praeludium-timer-' + el.dataset.day + '-' + p : null;
+      state = { acc: 0, since: 0 };
+      if (!key) return;
+      try {
+        var saved = JSON.parse(localStorage.getItem(key) || 'null');
+        if (saved && typeof saved.acc === 'number') state = saved;
+      } catch (e) {}
+    }
+    function save() {
+      if (!key) return;
+      try { localStorage.setItem(key, JSON.stringify(state)); } catch (e) {}
+    }
+    function elapsed() {
+      return state.acc + (state.since ? Date.now() - state.since : 0);
+    }
+    function paint() {
+      var ms = elapsed();
+      if (targetMs > 0) {
+        if (ms < targetMs) seenBelow = true;
+        if (state.since && seenBelow && !state.rung && ms >= targetMs) {
+          state.rung = true;
+          save();
+          bell();
+        }
+      }
+      display.textContent = fmt(ms);
+      toggle.textContent = state.since ? L.pause : (state.acc > 0 ? L.resume : L.start);
+      toggle.disabled = !pieceId();
+      done.hidden = ms < 1000;
+      display.classList.toggle('running', !!state.since);
+    }
+    toggle.addEventListener('click', function() {
+      if (!pieceId()) return;
+      ensureBell();
+      if (state.since) {
+        state.acc = elapsed();
+        state.since = 0;
+      } else {
+        state.since = Date.now();
+      }
+      save();
+      paint();
+    });
+    done.addEventListener('click', function() {
+      var mins = Math.round(elapsed() / 60000);
+      if (mins < 1) mins = 1;
+      var input = form.querySelector('input[name="minutes"]');
+      if (input) input.value = mins;
+      state = { acc: 0, since: 0 };
+      if (key) { try { localStorage.removeItem(key); } catch (e) {} }
+      paint();
+    });
+    if (select) select.addEventListener('change', function() { load(); paint(); });
+    load();
+    paint();
+    timers.push(paint);
+  });
+  if (timers.length) setInterval(function() { timers.forEach(function(p) { p(); }); }, 500);
+  // Salta asks for a second tap before submitting: the first tap only
+  // arms the button for a few seconds.
+  document.querySelectorAll('.skip-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      if (btn.dataset.armed) return;
+      e.preventDefault();
+      btn.dataset.armed = '1';
+      btn.dataset.label = btn.textContent;
+      btn.textContent = L.skipConfirm;
+      btn.classList.add('armed');
+      setTimeout(function() {
+        if (!btn.isConnected) return;
+        delete btn.dataset.armed;
+        btn.textContent = btn.dataset.label;
+        btn.classList.remove('armed');
+      }, 3000);
+    });
+  });
+})();</script>
+{% endblock %}

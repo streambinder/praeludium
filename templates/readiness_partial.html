@@ -1,0 +1,14 @@
+{% if Readiness %}
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("readiness.title") }}</h2></div>
+{% for r in Readiness %}
+<a class="ready-link" href="/auditions/{{ r.ID }}">
+<div class="ready-row">
+<div class="ready-head"><span class="ready-name">{{ r.Name }}</span><span class="meta">{{ dateIT(r.Date) }} · {{ tp("days.in", r.Days) }} · {{ tp("pieces.count", r.Pieces) }}</span><span class="ready-pct">{{ r.Pct }}%</span></div>
+<div class="budget-bar"><span style="--w: {{ r.Pct }}%"></span></div>
+</div>
+</a>
+{% endfor %}
+<p class="meta">{{ t("readiness.note") }}</p>
+</section>
+{% endif %}

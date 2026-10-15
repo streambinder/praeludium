@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="{{ lang() }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ Title }} · præludium</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="site-header">
+<div class="header-inner">
+<a class="brand" href="/"><span class="brand-mark">P</span><span class="brand-name">præludium</span></a>
+<nav>
+<a href="/" class="{% if Nav == "today" %}active{% endif %}">{{ t("nav.today") }}</a>
+<a href="/pieces" class="{% if Nav == "pieces" %}active{% endif %}">{{ t("nav.pieces") }}</a>
+<a href="/auditions" class="{% if Nav == "auditions" %}active{% endif %}">{{ t("nav.auditions") }}</a>
+<a href="/diary" class="{% if Nav == "diary" %}active{% endif %}">{{ t("nav.diary") }}</a>
+<a href="/settings" class="{% if Nav == "settings" %}active{% endif %}">{{ t("nav.settings") }}</a>
+</nav>
+</div>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<footer class="site-footer"><span>præludium · {{ t("app.tagline") }}</span></footer>
+<script>
+(function() {
+  var io = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) {
+      if (e.isIntersecting) {
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      }
+    });
+  }, {threshold: 0.1, rootMargin: '0px 0px -4% 0px'});
+
+  document.querySelectorAll('.reveal').forEach(function(el) { io.observe(el); });
+
+  // Prep-map labels: shrink the font until the whole label fits its tile.
+  function fitTileLabels() {
+    document.querySelectorAll('.ptile').forEach(function(tile) {
+      var span = tile.querySelector('span');
+      if (!span) return;
+      span.style.fontSize = '';
+      var size = parseFloat(window.getComputedStyle(span).fontSize);
+      var maxH = tile.clientHeight - 6;
+      var guard = 80;
+      while (
+        (span.scrollHeight > maxH || span.scrollWidth > span.clientWidth + 1) &&
+        size > 6 &&
+        guard-- > 0
+      ) {
+        size -= 0.5;
+        span.style.fontSize = size + 'px';
+      }
+    });
+  }
+  fitTileLabels();
+  window.addEventListener('load', fitTileLabels);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(fitTileLabels);
+  }
+  var fitTimer;
+  window.addEventListener('resize', function() {
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(fitTileLabels, 150);
+  });
+})();
+</script>
+<script>
+// Preparation pins: tap (mobile) toggles the percentage tooltip; a tap on
+// the pin inside a link chip shows the tooltip instead of navigating.
+document.addEventListener('click', function(e) {
+  var pin = e.target.closest('.prep-pin');
+  document.querySelectorAll('.prep-pin.open').forEach(function(p) {
+    if (p !== pin) p.classList.remove('open');
+  });
+  if (pin) {
+    pin.classList.toggle('open');
+    e.preventDefault();
+  }
+});
+</script>
+<script src="/static/recorder.js" defer></script>
+</body>
+</html>

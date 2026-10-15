@@ -1,0 +1,127 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+<span class="overline">{{ t("diary.overline") }}</span>
+<h1>{{ t("nav.diary") }}</h1>
+<p class="meta">{{ t("diary.subtitle") }}</p>
+</div>
+
+{% if Chips %}
+<div class="chips map-filters">
+<a class="chip{% if TuttiOn %} on{% endif %}" href="/diary">{{ t("diary.all") }}</a>
+{% for chip in Chips %}<a class="chip{% if chip.Selected %} on{% endif %}{% if chip.Archived %} muted{% endif %}" href="{{ chip.Href }}">{{ chip.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(chip.Prep)) }}"><span class="prep-dot lv{{ chip.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(chip.Prep)) }}</span></span></a>{% endfor %}
+</div>
+{% endif %}
+{% if PrepMap %}
+<section>
+<div class="section-head"><h2>{{ t("prepmap.title") }}</h2><span class="meta">{{ tp("prepmap.meta", PrepMap | length) }}</span></div>
+<div class="prepmap desk panel reveal" role="img" aria-label="{{ t("prepmap.aria_all") }}">
+<div class="ptiles">
+{% for tile in PrepMap %}<a class="ptile lv{{ tile.Level }}{{ tile.Corner }}" style="left:calc({{ cssf(tile.X) }}% + 3px);top:calc({{ cssf(tile.Y) }}% + 3px);width:calc({{ cssf(tile.W) }}% - 6px);height:calc({{ cssf(tile.H) }}% - 6px)" href="/diary/piece/{{ tile.PieceID }}" title="{{ tile.Title }}"><span>{{ tile.Label }}</span></a>
+{% endfor %}
+</div>
+</div>
+<div class="prepmap mob panel reveal" role="img" aria-label="{{ t("prepmap.aria_all") }}">
+<div class="ptiles">
+{% for tile in PrepMapMobile %}<a class="ptile lv{{ tile.Level }}{{ tile.Corner }}" style="left:calc({{ cssf(tile.X) }}% + 3px);top:calc({{ cssf(tile.Y) }}% + 3px);width:calc({{ cssf(tile.W) }}% - 6px);height:calc({{ cssf(tile.H) }}% - 6px)" href="/diary/piece/{{ tile.PieceID }}" title="{{ tile.Title }}"><span>{{ tile.Label }}</span></a>
+{% endfor %}
+</div>
+</div>
+<div class="preplegend reveal">
+<span class="preplegend-scale"><i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i></span>
+<span>{{ t("prepmap.legend_diary") }}<a href="/pieces">{{ t("nav.pieces") }}</a></span>
+</div>
+</section>
+{% elif Filtered %}
+<p class="empty">{{ t("diary.no_pieces_filter") }}</p>
+{% endif %}
+
+{% if Stats.HasDist or Stats.HasWeeks or Stats.Auditions or Stats.Coverage or Stats.HasConf or Stats.HasConst %}
+<section>
+<div class="section-head"><h2>{{ t("stats.title") }}</h2></div>
+{% if Stats.HasDist %}
+<div class="panel reveal">
+<div class="section-head"><h2>{{ t("stats.dist_title") }}</h2><span class="meta">{{ tp("pieces.count", Stats.DistPieces) }}</span></div>
+<p class="empty-note">{{ t("stats.dist_note") }}</p>
+<svg viewBox="0 0 740 190" class="chart" role="img" aria-label="{{ t("stats.dist_title") }}">
+{% for b in Stats.Dist.Bars %}<rect x="{{ b.X }}" y="{{ b.Y }}" width="{{ b.W }}" height="{{ b.H }}" rx="4" class="bar"/><text x="{{ b.CX }}" y="{{ b.CountY }}" text-anchor="middle" class="count">{{ b.Count }}</text><text x="{{ b.CX }}" y="172" text-anchor="middle">{{ b.Label }}</text>{% endfor %}
+</svg>
+</div>
+{% endif %}
+{% if Stats.HasWeeks %}
+<div class="panel reveal">
+<div class="section-head"><h2>{{ t("stats.hours_title") }}</h2></div>
+<p class="empty-note">{{ t("stats.hours_note") }}</p>
+<svg viewBox="0 0 740 176" class="chart" role="img" aria-label="{{ t("stats.hours_title") }}">
+{% for g in Stats.Weeks.Grid %}<line x1="26" x2="712" y1="{{ g.Y }}" y2="{{ g.Y }}" class="grid"/><text x="18" y="{{ g.Y }}" dy="3.5" text-anchor="end">{{ g.Label }}</text>{% endfor %}
+<line x1="26" x2="26" y1="10" y2="138" class="axis"/>
+<polyline points="{{ Stats.Weeks.HiPts }}" class="hi"/>
+<polyline points="{{ Stats.Weeks.LoPts }}" class="lo"/>
+<polyline points="{{ Stats.Weeks.MeanPts }}" class="mean"/>
+{% for d in Stats.Weeks.Dots %}<circle cx="{{ d.X }}" cy="{{ d.Y }}" r="4"><title>{{ d.Title }}</title></circle>{% endfor %}
+<text x="{{ Stats.Weeks.FirstX }}" y="162" text-anchor="middle">{{ dateDMY(Stats.Weeks.First) }}</text>
+{% if not Stats.Weeks.Single %}<text x="{{ Stats.Weeks.LastX }}" y="162" text-anchor="middle">{{ dateDMY(Stats.Weeks.Last) }}</text>{% endif %}
+</svg>
+<div class="stats-legend"><span><i class="sw mean"></i>{{ t("stats.mean") }}</span><span><i class="sw hi"></i>{{ t("stats.p95") }}</span><span><i class="sw lo"></i>{{ t("stats.p05") }}</span></div>
+</div>
+{% endif %}
+{% if Stats.Auditions %}
+<div class="panel reveal">
+<div class="section-head"><h2>{{ t("stats.aud_title") }}</h2></div>
+<p class="empty-note">{{ t("stats.aud_note") }}</p>
+<div class="stat-rows">
+{% for row in Stats.Auditions %}<div class="stat-row"><span class="stat-name">{{ row.Name }}</span><span class="stat-track"><span class="stat-fill" style="width:{{ row.Pct }}%"></span></span><span class="stat-val">{{ row.Val }}</span></div>{% endfor %}
+</div>
+</div>
+{% endif %}
+{% if Stats.Coverage %}
+<div class="panel reveal">
+<div class="section-head"><h2>{{ t("stats.cov_title") }}</h2></div>
+<p class="empty-note">{{ t("stats.cov_note") }}</p>
+<div class="stat-rows">
+{% for row in Stats.Coverage %}<div class="stat-row"><span class="stat-name">{{ row.Name }}</span><span class="stat-track"><span class="stat-fill cov" style="width:{{ row.Pct }}%"></span></span><span class="stat-val">{{ row.Val }}</span></div>{% endfor %}
+</div>
+</div>
+{% endif %}
+{% if Stats.HasConf %}
+<div class="panel reveal">
+<div class="section-head"><h2>{{ t("stats.conf_title") }}</h2></div>
+<p class="empty-note">{{ t("stats.conf_note") }}</p>
+<svg viewBox="0 0 740 176" class="chart" role="img" aria-label="{{ t("stats.conf_title") }}">
+{% for g in Stats.Conf.Grid %}<line x1="26" x2="712" y1="{{ g.Y }}" y2="{{ g.Y }}" class="grid"/><text x="18" y="{{ g.Y }}" dy="3.5" text-anchor="end">{{ g.Label }}</text>{% endfor %}
+<line x1="26" x2="26" y1="10" y2="138" class="axis"/>
+<polyline points="{{ Stats.Conf.MeanPts }}" class="mean"/>
+{% for d in Stats.Conf.Dots %}<circle cx="{{ d.X }}" cy="{{ d.Y }}" r="4"><title>{{ d.Title }}</title></circle>{% endfor %}
+<text x="{{ Stats.Conf.FirstX }}" y="162" text-anchor="middle">{{ dateDMY(Stats.Conf.First) }}</text>
+{% if not Stats.Conf.Single %}<text x="{{ Stats.Conf.LastX }}" y="162" text-anchor="middle">{{ dateDMY(Stats.Conf.Last) }}</text>{% endif %}
+</svg>
+</div>
+{% endif %}
+{% if Stats.HasConst %}
+<div class="panel reveal">
+<div class="section-head"><h2>{{ t("stats.const_title") }}</h2><span class="meta">{{ tp("stats.streak", Stats.Streak) }}</span></div>
+<p class="empty-note">{{ t("stats.const_note") }}</p>
+<svg viewBox="0 0 740 190" class="chart" role="img" aria-label="{{ t("stats.const_title") }}">
+{% for b in Stats.Const.Bars %}<rect x="{{ b.X }}" y="{{ b.Y }}" width="{{ b.W }}" height="{{ b.H }}" rx="4" class="bar"/><text x="{{ b.CX }}" y="{{ b.CountY }}" text-anchor="middle" class="count">{{ b.Count }}</text><text x="{{ b.CX }}" y="172" text-anchor="middle">{{ b.Label }}</text>{% endfor %}
+</svg>
+</div>
+{% endif %}
+</section>
+{% endif %}
+
+<div class="stack">
+{% for d in Days %}
+<a class="card reveal day-link" href="/diary/day/{{ d.Date }}">
+<div class="day-row">
+<span class="day-dot" aria-hidden="true"></span>
+<span class="day-date">{{ dateIT(d.Date) }}</span>
+<span class="spacer"></span>
+<span class="badge"><span data-count="{{ d.Minutes }}">{{ dur(d.Minutes) }}</span></span>
+<span class="badge kind">{{ tp("pieces.count", d.Pieces) }}</span>
+</div>
+</a>
+{% else %}
+<p class="empty">{{ t("diary.no_days") }}</p>
+{% endfor %}
+</div>
+{% endblock %}
