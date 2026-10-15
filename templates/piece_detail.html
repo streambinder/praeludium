@@ -1,0 +1,121 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+<span class="overline">{{ t("piece.overline") }}</span>
+<h1><span class="prep-pin pin-title" tabindex="0" aria-label="{{ t("prep.label", pct(Piece.Prep)) }}"><span class="prep-dot lv{{ Piece.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(Piece.Prep)) }}</span></span>{{ Piece.Composer }} — {{ Piece.Work }}{% if Piece.Archived %} <span class="badge muted">{{ t("pieces.archived_badge") }}</span>{% endif %}</h1>
+{% if Piece.Movement %}<p class="piece-subtitle">{{ Piece.Movement }}</p>{% endif %}
+<div class="concorso-rows">
+{% for c in Piece.Auditions %}<div class="concorso-row"><span class="chip{% if c.Archived %} muted{% endif %}">{{ c.Name }}{% if c.RoundName %}<span class="chip-round">· {{ c.RoundName }}</span>{% endif %}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% if c.Excerpt %}<span class="meta">{{ c.Excerpt }}</span>{% endif %}</div>
+{% else %}<p class="meta">{{ t("piece.none_linked") }}</p>{% endfor %}
+</div>
+<div class="row btns">
+<a class="btn" href="/pieces/{{ Piece.ID }}/edit">{{ t("common.edit") }}</a>
+{% if Piece.Archived %}
+<form method="post" action="/pieces/{{ Piece.ID }}/restore" class="inline"><input type="hidden" name="return" value="/diary/piece/{{ Piece.ID }}"><button class="secondary" type="submit">{{ t("common.restore") }}</button></form>
+{% else %}
+<form method="post" action="/pieces/{{ Piece.ID }}/archive" class="inline"><input type="hidden" name="return" value="/diary/piece/{{ Piece.ID }}"><button class="secondary" type="submit">{{ t("common.archive") }}</button></form>
+{% endif %}
+</div>
+</div>
+
+{% if Spark.Points %}
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("piece.security_history") }}</h2></div>
+<svg viewBox="0 0 740 118" class="spark" role="img" aria-label="{{ t("piece.spark_aria") }}">
+<defs><linearGradient id="sparkGrad" x1="0" y1="0" x2="1" y2="0">
+<stop offset="0" stop-color="#c99a5b"/><stop offset="1" stop-color="#8a5a2e"/>
+</linearGradient></defs>
+{% for g in Spark.Grid %}<line x1="26" x2="712" y1="{{ g.Y }}" y2="{{ g.Y }}" class="spark-grid"/><text x="18" y="{{ g.Y }}" dy="3.5" text-anchor="end" class="spark-ylabel">{{ g.Label }}</text>{% endfor %}
+<line x1="26" x2="26" y1="10" y2="86" class="spark-axis"/>
+<polyline points="{% for pt in Spark.Points %}{% if not loop.first %} {% endif %}{{ pt.X }},{{ pt.Y }}{% endfor %}" fill="none" stroke-width="2"/>
+{% for pt in Spark.Points %}<circle cx="{{ pt.X }}" cy="{{ pt.Y }}" r="4"><title>{{ t("piece.spark_point", dateIT(pt.Date), pt.Conf) }}</title></circle>{% endfor %}
+<text x="{{ Spark.FirstX }}" y="104" text-anchor="middle" class="spark-xlabel">{{ dateDMY(Spark.First) }}</text>
+{% if not Spark.Single %}<text x="{{ Spark.LastX }}" y="104" text-anchor="middle" class="spark-xlabel">{{ dateDMY(Spark.Last) }}</text>{% endif %}
+</svg>
+</section>
+{% endif %}
+
+{% if HasTempo %}
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("piece.tempo_title") }}</h2><span class="meta">{{ t("piece.tempo_latest", TempoLatest) }}{% if Piece.TargetBPM.Valid %} · {{ t("piece.tempo_target", Piece.TargetBPM.Int64) }}{% endif %}</span></div>
+<svg viewBox="0 0 740 176" class="chart" role="img" aria-label="{{ t("piece.tempo_title") }}">
+{% for g in Tempo.Grid %}<line x1="26" x2="712" y1="{{ g.Y }}" y2="{{ g.Y }}" class="grid"/><text x="18" y="{{ g.Y }}" dy="3.5" text-anchor="end">{{ g.Label }}</text>{% endfor %}
+<line x1="26" x2="26" y1="10" y2="138" class="axis"/>
+{% if Tempo.HasTarget %}<line x1="26" x2="712" y1="{{ Tempo.TargetY }}" y2="{{ Tempo.TargetY }}" class="target"/>{% endif %}
+<polyline points="{{ Tempo.Pts }}" class="mean"/>
+{% for pt in Tempo.Points %}<circle cx="{{ pt.X }}" cy="{{ pt.Y }}" r="4"><title>{{ pt.Title }}</title></circle>{% endfor %}
+<text x="{{ Tempo.FirstX }}" y="162" text-anchor="middle">{{ dateDMY(Tempo.First) }}</text>
+{% if not Tempo.Single %}<text x="{{ Tempo.LastX }}" y="162" text-anchor="middle">{{ dateDMY(Tempo.Last) }}</text>{% endif %}
+</svg>
+</section>
+{% endif %}
+
+<section class="panel reveal" id="recorder">
+<div class="section-head"><h2>{{ t("rec.title") }}</h2><span class="meta">{{ Recordings | length }}</span></div>
+{% include "recorder.html" %}
+{% if Recordings %}
+<div class="rec-list">
+{% for r in Recordings %}
+<div class="rec-item">
+<div class="rec-row">
+<span><strong>{{ r.DateLabel }}</strong> · {{ r.DurationLabel }}{% if r.Rec.MockItemID.Valid %} · <span class="badge">{{ t("rec.mock") }}</span>{% endif %}</span>
+<span class="rec-actions">
+{% if r.Rec.ShareToken %}<button type="button" class="secondary" data-copy="/share/{{ r.Rec.ShareToken }}">{{ t("rec.copy_link") }}</button>{% endif %}
+<form method="post" action="/recordings/{{ r.Rec.ID }}/{% if r.Rec.ShareToken %}share/revoke{% else %}share{% endif %}" class="inline"><button class="secondary" type="submit">{% if r.Rec.ShareToken %}{{ t("rec.revoke") }}{% else %}{{ t("rec.share") }}{% endif %}</button></form>
+<form method="post" action="/recordings/{{ r.Rec.ID }}/delete" class="inline"><button class="secondary" type="submit">{{ t("rec.delete") }}</button></form>
+</span>
+</div>
+{% if r.Rec.ShareToken %}<p class="meta share-note">{{ t("rec.share_note") }} <code>/share/{{ r.Rec.ShareToken }}</code></p>{% endif %}
+<audio controls preload="none" src="/recordings/{{ r.Rec.ID }}/audio"></audio>
+</div>
+{% endfor %}
+</div>
+{% else %}<p class="empty">{{ t("rec.empty") }}</p>{% endif %}
+</section>
+
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("piece.today_score") }}</h2>{% if Score.HasUpcoming %}<span class="meta">{{ f1(Score.Score) }}</span>{% endif %}</div>
+{% if not Score.HasUpcoming %}
+<p class="empty-note">{{ t("piece.no_upcoming") }}</p>
+{% else %}
+<ul>
+<li><strong>{{ t("score.base_name") }} {{ f1(Score.Base) }}</strong> — {{ tp("score.auditions_count", Score.Upcoming | length) }}
+{% for c in Score.Upcoming %}{% if not loop.first %}, {% endif %}{{ c.Name }} ({{ t("score.priority", c.Weight) }}){% endfor %}</li>
+<li><strong>{{ t("score.urgency_name") }} {{ f1(Score.Urgency) }}</strong> — {{ t("score.urgency_why", Score.Days, Score.Upcoming[0].Name) }}</li>
+<li><strong>{{ t("score.need_name") }} {{ f1(Score.Need) }}</strong> — {{ t("score.need_why", confLabel(Score.Conf, Score.ConfRated)) }}</li>
+<li><strong>{{ t("score.recency_name") }} {{ f1(Score.Recency) }}</strong> — {{ sinceLabel(Score.Since, Score.SinceNever) }}</li>
+{% if Score.Diff > 1.0 %}<li><strong>{{ t("score.difficulty_name") }} ×{{ f1(Score.Diff) }}</strong> — {{ t("score.difficulty_why", Piece.Difficulty) }}</li>{% endif %}
+{% if Score.Rest < 1.0 %}<li><strong>{{ t("score.rest_name") }} ×{{ f1(Score.Rest) }}</strong> — {{ t("score.rest_why") }}</li>{% endif %}
+</ul>
+<p class="formula">{{ t("score.formula") }}{{ f1(Score.Base) }} × {{ f1(Score.Urgency) }} × {{ f1(Score.Need) }} × {{ f1(Score.Recency) }}{% if Score.Diff > 1.0 %} × {{ f1(Score.Diff) }}{% endif %}{% if Score.Rest < 1.0 %} × {{ f1(Score.Rest) }}{% endif %} = <strong>{{ f1(Score.Score) }}</strong></p>
+{% if Score.Skipped %}<p class="empty-note">{{ t("piece.skipped_today") }}</p>
+{% elif Score.Rank %}<p class="empty-note">{{ t("piece.rank", Score.Rank, Score.Candidates) }} {% if Score.InTop %}{{ t("piece.rank_in") }}{% else %}{{ t("piece.rank_out") }}{% endif %}.</p>{% endif %}
+{% if Score.InTop %}<p class="empty-note">{{ t("piece.already_in") }}</p>
+{% elif Score.ForecastDate %}<p class="empty-note"><strong>{{ t("piece.forecast_label") }}:</strong> {{ t("piece.forecast_in_a") }}<strong>{{ dateIT(Score.ForecastDate) }}</strong>{{ t("piece.forecast_in_b", f1(Score.ForecastScore), Score.ForecastWhy) }}</p>
+{% else %}<p class="empty-note"><strong>{{ t("piece.forecast_label") }}:</strong> {{ t("piece.forecast_never_a") }}{{ Score.Upcoming[0].Name }}, {{ dateIT(Score.Upcoming[0].Date) }}{{ t("piece.forecast_never_b") }}</p>{% endif %}
+{% endif %}
+</section>
+
+<section>
+<div class="section-head"><h2>{{ t("piece.sessions") }}</h2><span class="meta">{{ Sessions | length }}</span></div>
+<div class="stack">
+{% for s in Sessions %}
+<article class="card reveal">
+<div class="card-head"><strong>{{ dateIT(s.Date) }}</strong>
+{% if s.Minutes > 0 %}<span class="badge"><span data-count="{{ s.Minutes }}">{{ dur(s.Minutes) }}</span></span>{% endif %}
+{% if s.Confidence > 0 %}<span class="badge kind">{{ t("session.security", s.Confidence) }}</span>{% endif %}
+{% if s.BPM.Valid %}<span class="badge kind">{{ t("session.metronome", s.BPM.Int64) }}</span>{% endif %}
+{% if s.Note == "postponed" %}<span class="badge pin">{{ t("day.badge_postponed") }}</span>{% endif %}
+{% if s.Note == "skipped" %}<span class="badge muted">{{ t("today.skipped_badge") }}</span>{% endif %}
+{% if s.Note == "auto-skipped" %}<span class="badge muted">{{ t("today.skipped_plan_badge") }}</span>{% endif %}
+{% if s.Note == "baseline" %}<span class="badge kind">{{ t("day.badge_baseline") }}</span>{% endif %}
+</div>
+{% if s.Note != "postponed" and s.Note != "skipped" and s.Note != "auto-skipped" and s.Note != "baseline" and s.Note %}<div class="meta">{{ s.Note }}</div>{% endif %}
+</article>
+{% else %}
+<p class="empty">{{ t("piece.no_sessions") }}</p>
+{% endfor %}
+</div>
+</section>
+<p><a href="/pieces">&larr; {{ t("piece.back") }}</a></p>
+{% endblock %}

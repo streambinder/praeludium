@@ -1,0 +1,38 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+<span class="overline">{{ t("nav.diary") }}</span>
+<h1>{{ dateIT(Date) }}</h1>
+<p class="meta">{{ dur(Minutes) }} {{ t("day.logged") }} · {{ tp("pieces.count", Practiced) }}</p>
+</div>
+
+<div class="stack">
+{% for e in Entries %}
+<article class="card reveal">
+<span class="prep-pin pin-corner" tabindex="0" aria-label="{{ t("prep.label", pct(e.Prep)) }}"><span class="prep-dot lv{{ e.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(e.Prep)) }}</span></span>
+<div class="card-head"><strong><a class="card-link" href="/diary/piece/{{ e.PieceID }}">{{ e.Title }}</a></strong>
+<span class="rec-head"><a class="meta" href="/diary/piece/{{ e.PieceID }}?date={{ Date }}#recorder">{{ t("rec.record") }}</a>{% if e.Minutes > 0 %}<span class="badge"><span data-count="{{ e.Minutes }}">{{ dur(e.Minutes) }}</span></span>{% endif %}</span>
+</div>
+{% if e.Movement %}<div class="meta">{{ e.Movement }}</div>{% endif %}
+{% for s in e.Sessions %}<div class="meta session-line">{% if s.Note == "skipped" %}<span class="badge muted">{{ t("today.skipped_badge") }}</span>{% elif s.Note == "auto-skipped" %}<span class="badge muted">{{ t("today.skipped_plan_badge") }}</span>{% elif s.Note == "postponed" %}<span class="badge pin">{{ t("day.badge_postponed") }}</span>{% elif s.Note == "baseline" %}<span class="badge kind">{{ t("day.badge_baseline") }}</span>{% if s.Confidence > 0 %} · {{ t("session.security", s.Confidence) }}{% endif %}{% else %}{% if s.Minutes > 0 %}{{ dur(s.Minutes) }}{% endif %}{% if s.Confidence > 0 %}{% if s.Minutes > 0 %} · {% endif %}{{ t("session.security", s.Confidence) }}{% endif %}{% if s.BPM.Valid %}{% if s.Minutes > 0 or s.Confidence > 0 %} · {% endif %}{{ t("session.metronome", s.BPM.Int64) }}{% endif %}{% if s.Note %}{% if s.Minutes > 0 or s.Confidence > 0 or s.BPM.Valid %} · {% endif %}{{ s.Note }}{% endif %}{% endif %}</div>{% endfor %}
+</article>
+{% else %}{% if not Skipped %}
+<p class="empty">{{ t("day.no_sessions") }}</p>
+{% endif %}{% endfor %}
+</div>
+{% if Skipped %}
+<div class="section-head"><h2>{{ t("day.skipped_title") }}</h2><span class="meta">{{ tp("day.skipped_meta", Skipped | length) }}</span></div>
+<div class="stack">
+{% for e in Skipped %}
+<article class="card plan-card skipped-card reveal">
+<span class="badge muted done-corner">{% if e.Auto %}{{ t("today.skipped_plan_badge") }}{% else %}{{ t("today.skipped_badge") }}{% endif %}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(e.P.Prep)) }}"><span class="prep-dot lv{{ e.P.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(e.P.Prep)) }}</span></span></span>
+<div class="card-head">
+<strong><a class="card-link" href="/diary/piece/{{ e.P.ID }}">{{ e.P.Composer }} — {{ e.P.Work }}</a></strong>
+</div>
+<div class="meta movement-row"><span class="badge kind">{{ kindLabel(e.P.Kind) }}</span>{% for c in e.P.Auditions %}<span class="chip">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}</div>
+</article>
+{% endfor %}
+</div>
+{% endif %}
+<p><a href="/diary">&larr; {{ t("day.back") }}</a></p>
+{% endblock %}

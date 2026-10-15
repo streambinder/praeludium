@@ -1,0 +1,15 @@
+<div class="recorder" data-recorder data-piece="{{ Piece.ID }}" data-date="{{ RecorderDate }}"{% if RecorderMockItem %} data-mock-item="{{ RecorderMockItem }}"{% endif %}>
+<div class="rec-row">
+<button type="button" data-rec-start>● {{ t("rec.record") }}</button>
+<button type="button" class="secondary hidden" data-rec-stop disabled>{{ t("rec.stop") }}</button>
+<span class="meta" data-rec-time>0:00</span>
+<span class="rec-meter hidden" data-rec-meter aria-hidden="true"><span class="rec-meter-fill" data-rec-meter-fill></span></span>
+<span class="meta" data-rec-status></span>
+</div>
+<p class="meta hidden" data-rec-unsupported>{{ t("rec.unsupported") }}</p>
+<audio controls data-rec-preview class="hidden"></audio>
+<div class="rec-row hidden" data-rec-actions>
+<button type="button" data-rec-save>{{ t("rec.save") }}</button>
+<button type="button" class="secondary" data-rec-discard>{{ t("rec.discard") }}</button>
+</div>
+</div>

@@ -1,0 +1,81 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+<span class="overline">{{ t("nav.auditions") }}</span>
+<h1><span class="prep-pin pin-title" tabindex="0" aria-label="{{ t("prep.label", pct(Audition.Prep)) }}"><span class="prep-dot lv{{ Audition.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(Audition.Prep)) }}</span></span>{{ Audition.Name }}{% if Audition.Archived %} <span class="badge muted">{{ t("pieces.archived_badge") }}</span>{% elif Concluded %} <span class="badge done">{{ t("auditions.concluded_badge") }}</span>{% endif %}</h1>
+<p class="meta">{{ t("audition.date_label", dateIT(Audition.Date)) }} · {{ t("audition.priority_label", Audition.Weight) }} · {{ tp("pieces.linked", Pieces | length) }} · {{ tp("resources.count", Links | length) }}</p>
+<div class="row btns">
+{% if not Audition.Archived %}<a class="btn" href="/auditions/{{ Audition.ID }}/edit">{{ t("common.edit") }}</a>{% endif %}
+{% if Audition.Archived %}
+<form method="post" action="/auditions/{{ Audition.ID }}/restore" class="inline"><input type="hidden" name="return" value="/auditions/{{ Audition.ID }}"><button class="secondary" type="submit">{{ t("common.restore") }}</button></form>
+{% else %}
+<form method="post" action="/auditions/{{ Audition.ID }}/archive" class="inline"><input type="hidden" name="return" value="/auditions/{{ Audition.ID }}"><button class="secondary" type="submit">{{ t("common.archive") }}</button></form>
+{% endif %}
+</div>
+</div>
+
+{% if Links %}
+<section>
+<div class="section-head"><h2>{{ t("detail.resources") }}</h2></div>
+<div class="stack">
+{% for l in Links %}
+<article class="card reveal res-card">
+<div class="card-head"><strong><a class="card-link" href="{{ l.URL }}" target="_blank" rel="noopener">{{ l.Label }} ↗</a></strong></div>
+{% set parts = urlParts(l.URL) %}<div class="meta res-url">{% if parts.Tail %}<span class="res-pre">{{ parts.Head }}/…/</span><span class="res-tail"><span>{{ parts.Tail }}</span></span>{% else %}<span class="res-pre">{{ parts.Head }}</span>{% endif %}</div>
+</article>
+{% endfor %}
+</div>
+</section>
+{% endif %}
+
+{% if PrepMap %}
+<section>
+<div class="section-head"><h2>{{ t("prepmap.title") }}</h2><span class="meta">{{ tp("prepmap.meta", PrepMap | length) }}</span></div>
+<div class="prepmap desk panel reveal" role="img" aria-label="{{ t("prepmap.aria_audition") }}">
+<div class="ptiles">
+{% for tile in PrepMap %}<a class="ptile lv{{ tile.Level }}{{ tile.Corner }}" style="left:calc({{ cssf(tile.X) }}% + 3px);top:calc({{ cssf(tile.Y) }}% + 3px);width:calc({{ cssf(tile.W) }}% - 6px);height:calc({{ cssf(tile.H) }}% - 6px)" href="/diary/piece/{{ tile.PieceID }}" title="{{ tile.Title }}"><span>{{ tile.Label }}</span></a>
+{% endfor %}
+</div>
+</div>
+<div class="prepmap mob panel reveal" role="img" aria-label="{{ t("prepmap.aria_audition") }}">
+<div class="ptiles">
+{% for tile in PrepMapMobile %}<a class="ptile lv{{ tile.Level }}{{ tile.Corner }}" style="left:calc({{ cssf(tile.X) }}% + 3px);top:calc({{ cssf(tile.Y) }}% + 3px);width:calc({{ cssf(tile.W) }}% - 6px);height:calc({{ cssf(tile.H) }}% - 6px)" href="/diary/piece/{{ tile.PieceID }}" title="{{ tile.Title }}"><span>{{ tile.Label }}</span></a>
+{% endfor %}
+</div>
+</div>
+<div class="preplegend reveal">
+<span class="preplegend-scale"><i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i></span>
+<span>{{ t("prepmap.legend") }}</span>
+</div>
+</section>
+{% endif %}
+
+<section>
+<div class="section-head"><h2>{{ t("detail.linked_title") }}</h2><span class="meta">{{ Pieces | length }}</span></div>
+<div class="stack">
+{% for p in Pieces %}
+<article class="card reveal">
+<span class="prep-pin pin-corner" tabindex="0" aria-label="{{ t("prep.label", pct(p.Prep)) }}"><span class="prep-dot lv{{ p.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(p.Prep)) }}</span></span>
+<div class="card-head"><strong><a class="card-link" href="/diary/piece/{{ p.ID }}">{{ p.Composer }} — {{ p.Work }}</a></strong></div>
+<div class="meta movement-row"><span class="badge kind">{{ kindLabel(p.Kind) }}</span>{% if p.Movement %}<span>{{ p.Movement }}</span>{% endif %}{% for c in p.Auditions %}{% if c.ID == Audition.ID and c.RoundName %}<span class="badge">{{ c.RoundName }}</span>{% endif %}{% endfor %}</div>
+{% for c in p.Auditions %}{% if c.ID == Audition.ID and c.Excerpt %}<div class="meta">{{ c.Excerpt }}</div>{% endif %}{% endfor %}
+</article>
+{% else %}<p class="empty">{{ t("detail.no_pieces") }}</p>{% endfor %}
+</div>
+</section>
+<section>
+<div class="section-head"><h2>{{ t("mock.history") }}</h2><span class="meta">{{ Mocks | length }}</span></div>
+<p><a class="btn" href="/auditions/{{ Audition.ID }}/mock">{{ t("mock.start") }}</a> <a class="btn secondary" href="/auditions/{{ Audition.ID }}/readiness">{{ t("ready.title") }}</a></p>
+{% if Mocks %}
+<div class="stack">
+{% for m in Mocks %}
+<article class="card reveal">
+<div class="card-head"><strong><a class="card-link" href="/auditions/{{ Audition.ID }}/mock/{{ m.ID }}">{{ dateIT(m.Date) }}</a></strong>
+<span class="meta">{% if m.RoundName %}{{ m.RoundName }} · {% endif %}{{ t("mock.progress", m.Rated, m.Items | length) }}{% if m.Rated %} · {{ t("mock.mean", m.MeanText) }}{% endif %}</span></div>
+</article>
+{% endfor %}
+</div>
+{% else %}<p class="empty">{{ t("mock.empty") }}</p>{% endif %}
+</section>
+<p><a href="/auditions">&larr; {{ t("detail.back") }}</a></p>
+{% endblock %}

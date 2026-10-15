@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+<span class="overline">{{ t("mock.title") }}</span>
+<h1>{{ Audition.Name }}</h1>
+<p class="meta">{{ t("mock.setup_note") }}</p>
+</div>
+
+<section class="panel reveal">
+<form method="post" action="/auditions/{{ Audition.ID }}/mock">
+{% if Rounds %}
+<label>{{ t("mock.round") }}
+<select name="round_id">
+<option value="">{{ t("rounds.all") }}</option>
+{% for rd in Rounds %}<option value="{{ rd.ID }}">{{ rd.Name }}</option>{% endfor %}
+</select></label>
+{% endif %}
+<label>{{ t("mock.count") }} <input type="number" name="count" min="1" max="{{ PoolCount }}" value="{{ PoolCount }}"></label>
+<label class="check"><input type="checkbox" name="record" value="1" checked> {{ t("mock.record_take") }}</label>
+<div class="row btns"><button type="submit">{{ t("mock.start") }}</button>
+<a class="btn secondary" href="/auditions/{{ Audition.ID }}">{{ t("common.cancel") }}</a></div>
+</form>
+</section>
+{% endblock %}

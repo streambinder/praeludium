@@ -1,0 +1,27 @@
+<form method="post" action="/availability" class="avail-form">
+<input type="hidden" name="date" value="{{ Date }}">
+<div class="row">
+<label>{{ t("avail.from") }} <input type="time" name="start" value="09:00" required></label>
+<label>{{ t("avail.to") }} <input type="time" name="end" value="12:00" required></label>
+</div>
+<div class="row">
+<label>{{ t("avail.label") }} <input type="text" name="label" placeholder="{{ t("avail.label_ph") }}"></label>
+</div>
+<div class="row btns">
+<button type="submit">{{ t("avail.add") }}</button>
+<button type="button" class="secondary preset3h">{{ t("avail.preset3h") }}</button>
+<button type="button" class="secondary presetDay">{{ t("avail.preset_day") }}</button>
+</div>
+</form>
+<script>
+(function() {
+  var f = document.querySelector('.avail-form');
+  if (!f) return;
+  f.querySelector('.preset3h').onclick = function() {
+    f.start.value = '09:00'; f.end.value = '12:00';
+  };
+  f.querySelector('.presetDay').onclick = function() {
+    f.start.value = '09:00'; f.end.value = '18:00';
+  };
+})();
+</script>

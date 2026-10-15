@@ -1,0 +1,69 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+<span class="overline">{{ t("ready.title") }}</span>
+<h1>{{ Audition.Name }}</h1>
+<p class="meta">{% if Concluded %}{{ t("auditions.concluded_badge") }}{% elif IsToday %}{{ t("readiness.today") }}{% else %}{{ tp("readiness.days_left", DaysLeft) }}{% endif %} · {{ t("audition.date_label", dateIT(Audition.Date)) }}</p>
+</div>
+
+<div class="stack">
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("stats.cov_title") }}</h2></div>
+<p class="empty-note">{{ t("stats.cov_note") }}</p>
+<div class="stat-rows">
+<div class="stat-row"><span class="stat-name">{{ Audition.Name }}</span><span class="stat-track"><span class="stat-fill cov" style="width:{{ Coverage.Pct }}%"></span></span><span class="stat-val">{{ Coverage.Val }}</span></div>
+</div>
+</section>
+
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("readiness.study_time") }}</h2></div>
+<div class="stat-rows">
+<div class="stat-row"><span class="stat-name">{{ t("readiness.total") }}</span><span class="stat-val">{{ TotalLabel }}</span></div>
+<div class="stat-row"><span class="stat-name">{{ t("readiness.last7") }}</span><span class="stat-val">{{ Last7Label }}</span></div>
+</div>
+</section>
+
+{% if HasConf %}
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("stats.conf_title") }}</h2></div>
+<p class="empty-note">{{ t("stats.conf_note") }}</p>
+<svg viewBox="0 0 740 176" class="chart" role="img" aria-label="{{ t("stats.conf_title") }}">
+{% for g in Conf.Grid %}<line x1="26" x2="712" y1="{{ g.Y }}" y2="{{ g.Y }}" class="grid"/><text x="18" y="{{ g.Y }}" dy="3.5" text-anchor="end">{{ g.Label }}</text>{% endfor %}
+<line x1="26" x2="26" y1="10" y2="138" class="axis"/>
+<polyline points="{{ Conf.MeanPts }}" class="mean"/>
+{% for d in Conf.Dots %}<circle cx="{{ d.X }}" cy="{{ d.Y }}" r="4"><title>{{ d.Title }}</title></circle>{% endfor %}
+<text x="{{ Conf.FirstX }}" y="162" text-anchor="middle">{{ dateDMY(Conf.First) }}</text>
+{% if not Conf.Single %}<text x="{{ Conf.LastX }}" y="162" text-anchor="middle">{{ dateDMY(Conf.Last) }}</text>{% endif %}
+</svg>
+</section>
+{% endif %}
+
+{% if TempoCount %}
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("readiness.tempo_label") }}</h2></div>
+<div class="stat-rows">
+<div class="stat-row"><span class="stat-name">{{ t("readiness.tempo_label") }}</span><span class="stat-val">{{ TempoAt }}/{{ TempoCount }}</span></div>
+</div>
+</section>
+{% endif %}
+
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("mock.history") }}</h2><span class="meta">{{ Mocks | length }}</span></div>
+{% if Mocks %}
+<div class="stat-rows">
+{% for m in Mocks %}<div class="stat-row"><span class="stat-name"><a href="/auditions/{{ Audition.ID }}/mock/{{ m.ID }}">{{ dateIT(m.Date) }}{% if m.RoundName %} · {{ m.RoundName }}{% endif %}</a></span><span class="stat-val">{{ t("mock.progress", m.Rated, m.Items | length) }}{% if m.Rated %} · {{ t("mock.mean", m.MeanText) }}{% endif %}</span></div>{% endfor %}
+</div>
+{% else %}<p class="empty">{{ t("mock.empty") }}</p>{% endif %}
+</section>
+
+{% if Weakest %}
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("readiness.weakest") }}</h2></div>
+<div class="stat-rows">
+{% for w in Weakest %}<div class="stat-row"><span class="stat-name"><span class="prep-dot lv{{ w.Level }}"></span> <a href="/diary/piece/{{ w.PieceID }}">{{ w.Title }}</a></span><span class="stat-val">{{ w.Prep }}%</span></div>{% endfor %}
+</div>
+</section>
+{% endif %}
+</div>
+<p><a href="/auditions/{{ Audition.ID }}">&larr; {{ t("detail.back_to") }}</a></p>
+{% endblock %}
