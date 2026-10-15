@@ -53,34 +53,25 @@ jobs:
           SAVE_SUPER_LINTER_OUTPUT: false
           MULTI_STATUS: false
           LOG_LEVEL: WARN
-  go:
+  rust:
     needs: [lint]
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: "1.26"
-          cache: true
-      - run: go install mvdan.cc/gofumpt@v0.11.0
-      - run: test -z "$(gofumpt -l .)"
-      - run: go vet ./...
-      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          version: v2.14.0
-          only-new-issues: false
-          args: --config=.github/linters/.golangci.yml ./...
+      - run: rustup toolchain install stable --component rustfmt,clippy,llvm-tools-preview
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
       - run: |
           echo Testing...
-          go test -timeout 120s ./...
+          cargo test --locked
           echo Checking coverage...
-          go test -timeout 120s -cover ./... | tee coverage.txt
-          awk '/coverage:/ { pct = ""; for (i = 1; i <= NF; i++) if ($i == "coverage:") { pct = $(i+1); gsub(/%/, "", pct) } if (pct != "" && pct + 0 < 90) { print "coverage below 90%:", $0; bad = 1 } } END { exit bad }' coverage.txt
-      - run: CGO_ENABLED=0 go build ./...
+          cargo install cargo-llvm-cov --locked
+          cargo llvm-cov --locked --fail-under-lines 80
+      - run: cargo build --release --locked
   docker:
-    needs: [go]
+    needs: [rust]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04-arm
     permissions:

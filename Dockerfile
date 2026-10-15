@@ -1,11 +1,15 @@
 # ---- build ----
-FROM golang:1.26-alpine AS build
+FROM rust:1-alpine3.24 AS build
 WORKDIR /src
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOARCH=arm64 go build -trimpath -o /out/praeludium ./cmd/praeludium \
-  && mkdir -p /out/data
+RUN apk add --no-cache musl-dev=1.2.6-r2
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY templates ./templates
+COPY static ./static
+COPY locales ./locales
+RUN cargo build --release --locked \
+  && mkdir -p /out/data \
+  && cp target/release/praeludium /out/praeludium
 
 # ---- runtime ----
 FROM gcr.io/distroless/static:nonroot
