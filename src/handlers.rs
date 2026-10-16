@@ -80,7 +80,11 @@ fn html_escape(s: &str) -> String {
 /// Render a page in the request language, answering 500 on failure.
 pub fn render(headers: &HeaderMap, page: &str, data: impl Serialize) -> Response {
     let lang = req_lang(headers);
-    match crate::render::render_page(&lang, page, minijinja::Value::from_serialize(&data)) {
+    match crate::render::render_page(
+        &lang,
+        page,
+        minijinja::Value::from(minijinja::value::Serde(&data)),
+    ) {
         Ok(html) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "text/html; charset=utf-8")

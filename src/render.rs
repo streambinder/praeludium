@@ -105,7 +105,9 @@ fn build_env(lang: &str) -> Environment<'static> {
     });
     env.add_function("urlParts", |raw: String| -> Value {
         let parts = url_parts(&raw);
-        Value::from_serialize(serde_json::json!({"Head": parts.0, "Tail": parts.1}))
+        Value::from(minijinja::value::Serde(
+            serde_json::json!({"Head": parts.0, "Tail": parts.1}),
+        ))
     });
     env.add_function("hhmm", |mins: i64| -> String { hhmm(mins) });
     env.add_function("dur", |mins: i64| -> String { dur(mins) });
