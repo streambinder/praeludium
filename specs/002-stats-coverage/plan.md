@@ -100,8 +100,22 @@ it, one archived audition, and one past audition.
 
 ## Recorded Unreachable Lines
 
-Filled at convergence, one entry per line that stays uncovered,
-with the reason.
+Eleven lines stay uncovered at the final measure of 98.6%. Every
+one resists coverage without a non-test change, so the plan records
+the line instead of forcing it (spec FR-003):
+
+- The error propagations of the five query preparations in the
+  `App` aggregations (`db.prepare(...)?` in `piece_totals`,
+  `day_totals`, `audition_time_rows`, `coverage_rows`, and the
+  confidence query of `diary_stats`). The lines fire only when
+  SQLite rejects a static query, and the suite holds no double that
+  makes a query fail.
+- The zero fallback of the percentage in `audition_time_rows`
+  (line 596). A row exists only when a positive minute sum exists,
+  so the maximum is positive whenever the map runs.
+- The `total == 0` guard in `coverage_rows` (line 639). A grouped
+  row exists only when at least one piece joins the audition, so
+  the total is never zero.
 
 ## Verification
 
