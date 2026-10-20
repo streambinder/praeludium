@@ -4012,4 +4012,632 @@ mod tests {
         assert_eq!(audition_filter_href(&sel), "/diary?c=1,3");
         assert_eq!(audition_filter_href(&HashSet::new()), "/diary");
     }
+
+    // ---------- coverage batch: helpers ----------
+
+    fn test_app() -> App {
+        App {
+            db: std::sync::Mutex::new(crate::db::open_memory().unwrap()),
+            data_dir: std::path::PathBuf::from("/tmp"),
+        }
+    }
+
+    fn seed_audition(app: &App, id: i64, date: &str, weight: i64) {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO auditions (id, name, audition_date, weight) VALUES (?, 'Aud', ?, ?)",
+            params![id, date, weight],
+        )
+        .unwrap();
+    }
+
+    fn seed_piece(app: &App, id: i64, difficulty: i64) {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO pieces (id, composer, work, difficulty) VALUES (?, 'Comp', 'Work', ?)",
+            params![id, difficulty],
+        )
+        .unwrap();
+    }
+
+    fn link(app: &App, piece: i64, audition: i64) {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO piece_audition (piece_id, audition_id) VALUES (?, ?)",
+            params![piece, audition],
+        )
+        .unwrap();
+    }
+
+    fn seed_session(app: &App, date: &str, piece: i64, minutes: i64, conf: i64, note: &str) {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO sessions (date, piece_id, minutes, confidence, note) VALUES (?, ?, ?, ?, ?)",
+            params![date, piece, minutes, conf, note],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn error_and_render_helpers() {
+        let resp = err500(&"boom");
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let headers = HeaderMap::new();
+        let resp = render(&headers, "no-such-page.html", serde_json::json!({}));
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let resp = render(&headers, "layout.html", serde_json::json!({}));
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn cookie_and_lang_edges() {
+        let mut headers = HeaderMap::new();
+        assert_eq!(cookie_value(&headers, "lang"), None);
+        headers.insert(
+            header::COOKIE,
+            axum::http::HeaderValue::from_static("a=1; lang=it; b=2"),
+        );
+        assert_eq!(cookie_value(&headers, "lang"), Some("it".to_string()));
+        assert_eq!(cookie_value(&headers, "missing"), None);
+        assert_eq!(req_lang(&headers), "it");
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::COOKIE,
+            axum::http::HeaderValue::from_static("bare; lang = de "),
+        );
+        assert_eq!(cookie_value(&headers, "lang"), Some("de".to_string()));
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::ACCEPT_LANGUAGE,
+            axum::http::HeaderValue::from_static("fr;q=0.9"),
+        );
+        assert_eq!(req_lang(&headers), "fr");
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::COOKIE,
+            axum::http::HeaderValue::from_bytes(&[0xff, 0xfe]).unwrap(),
+        );
+        assert_eq!(cookie_value(&headers, "lang"), None);
+        assert_eq!(req_lang(&headers), "en");
+    }
+
+    #[test]
+    fn form_value_edges() {
+        let form = FormData::query_only("n=abc&m=&ids=1&ids=x&ids=3&ids=2");
+        assert_eq!(form.int("n", 9), 9);
+        assert_eq!(form.int("m", 9), 9);
+        assert_eq!(form.ids("ids"), vec![1, 3, 2]);
+        assert_eq!(form.get_all("ids"), vec!["1", "x", "3", "2"]);
+        assert_eq!(path_id("0"), None);
+        assert_eq!(path_id("-3"), None);
+        assert_eq!(path_id("7"), Some(7));
+        assert_eq!(parse_hhmm(""), None);
+        assert_eq!(parse_hhmm("09:05"), Some(545));
+    }
+
+    #[test]
+    fn form_field_helpers() {
+        let form = FormData::query_only("difficulty=0");
+        assert_eq!(clamp_difficulty(&form), 1);
+        let form = FormData::query_only("difficulty=9");
+        assert_eq!(clamp_difficulty(&form), 5);
+        let form = FormData::query_only("difficulty=3");
+        assert_eq!(clamp_difficulty(&form), 3);
+        let form = FormData::query_only("difficulty=x");
+        assert_eq!(clamp_difficulty(&form), 1);
+        let form = FormData::query_only("excerpt-4=  Bach  ");
+        assert_eq!(link_excerpt(&form, 4), "Bach");
+        assert_eq!(link_excerpt(&form, 9), "");
+        let form = FormData::query_only("target_bpm=");
+        assert_eq!(form_target_bpm(&form), None);
+        let form = FormData::query_only("target_bpm=10");
+        assert_eq!(form_target_bpm(&form), None);
+        let form = FormData::query_only("target_bpm=120");
+        assert_eq!(form_target_bpm(&form), Some(120));
+        assert_eq!(valid_weight(0), 1);
+        assert_eq!(valid_weight(9), 5);
+        assert_eq!(valid_weight(3), 3);
+        let headers = HeaderMap::new();
+        let form = FormData::query_only("name=&date=2027-01-01");
+        assert!(audition_name_date(&headers, &form).is_err());
+        let form = FormData::query_only("name=X&date=");
+        assert!(audition_name_date(&headers, &form).is_err());
+        let form = FormData::query_only("name= X &date=2027-01-01");
+        assert_eq!(
+            audition_name_date(&headers, &form).unwrap(),
+            ("X".to_string(), "2027-01-01".to_string())
+        );
+    }
+
+    #[test]
+    fn link_round_ownership() {
+        let app = test_app();
+        seed_audition(&app, 1, "2027-01-08", 3);
+        seed_audition(&app, 2, "2027-02-01", 3);
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO audition_rounds (id, audition_id) VALUES (5, 1)",
+            [],
+        )
+        .unwrap();
+        drop(db);
+        let form = FormData::query_only("round-1=5");
+        assert_eq!(link_round(&app, &form, 1), Some(5));
+        let form = FormData::query_only("round-2=5");
+        assert_eq!(link_round(&app, &form, 2), None);
+        let form = FormData::query_only("round-1=");
+        assert_eq!(link_round(&app, &form, 1), None);
+        let form = FormData::query_only("round-1=abc");
+        assert_eq!(link_round(&app, &form, 1), None);
+        let form = FormData::query_only("round-1=99");
+        assert_eq!(link_round(&app, &form, 1), None);
+    }
+
+    #[test]
+    fn or_404_and_valued_ids() {
+        let app = test_app();
+        seed_audition(&app, 1, "2027-01-08", 3);
+        seed_piece(&app, 1, 3);
+        seed_piece(&app, 2, 3);
+        assert!(app.piece_or_404("1").is_ok());
+        assert!(app.piece_or_404("abc").is_err());
+        assert!(app.piece_or_404("999").is_err());
+        assert!(app.audition_or_404("1").is_ok());
+        assert!(app.audition_or_404("0").is_err());
+        assert!(app.audition_or_404("999").is_err());
+        assert!(app.valued_piece_ids().unwrap().is_empty());
+        seed_session(&app, "2026-10-19", 1, 0, 0, "baseline");
+        seed_session(&app, "2026-10-19", 2, 10, 0, "");
+        let valued = app.valued_piece_ids().unwrap();
+        assert!(valued.contains(&1));
+        assert!(valued.contains(&2));
+    }
+
+    // ---------- coverage batch: plan machinery ----------
+
+    fn audition(id: i64, date: &str, weight: i64) -> Audition {
+        Audition {
+            id,
+            name: format!("Aud{id}"),
+            date: date.to_string(),
+            weight,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn upcoming_filters_and_nearest() {
+        let p = Piece {
+            auditions: vec![
+                audition(1, "2026-01-01", 3),
+                Audition {
+                    archived: true,
+                    ..audition(2, "2027-01-01", 3)
+                },
+                audition(3, "2026-10-25", 4),
+                audition(4, "2026-10-22", 5),
+            ],
+            ..Default::default()
+        };
+        let (upcoming, weights, days) = upcoming_auditions(&p, "2026-10-20").unwrap();
+        assert_eq!(upcoming.len(), 2);
+        assert_eq!(weights, vec![4, 5]);
+        assert_eq!(days, 2);
+        let p = Piece::default();
+        let (upcoming, _, days) = upcoming_auditions(&p, "2026-10-20").unwrap();
+        assert!(upcoming.is_empty());
+        assert_eq!(days, -1);
+    }
+
+    #[test]
+    fn sort_plan_items_tie_breaks() {
+        let item = |id: i64, score: f64, base: f64| PlanItem {
+            piece: Piece {
+                id,
+                ..Default::default()
+            },
+            score,
+            base,
+            ..Default::default()
+        };
+        let mut items = vec![item(1, 1.0, 1.0), item(2, 3.0, 1.0), item(3, 3.0, 2.0)];
+        sort_plan_items(&mut items);
+        assert_eq!(items[0].piece.id, 3);
+        assert_eq!(items[1].piece.id, 2);
+        let mut items = vec![item(5, 2.0, 2.0), item(2, 2.0, 2.0)];
+        sort_plan_items(&mut items);
+        assert_eq!(items[0].piece.id, 2);
+        let mut items = vec![item(1, f64::NAN, 1.0), item(2, 1.0, 0.5)];
+        sort_plan_items(&mut items);
+        assert_eq!(items[0].piece.id, 1);
+    }
+
+    #[test]
+    fn score_piece_and_build_plan() {
+        let app = test_app();
+        seed_audition(&app, 1, "2026-11-01", 4);
+        seed_audition(&app, 2, "2026-01-01", 4);
+        seed_piece(&app, 1, 3);
+        seed_piece(&app, 2, 2);
+        link(&app, 1, 1);
+        link(&app, 2, 2);
+        let coeffs = app.get_coeffs().unwrap();
+        let plan = app.build_plan("2026-10-20").unwrap();
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].piece.id, 1);
+        assert!(!plan[0].conf_rated);
+        assert_eq!(plan[0].conf, 2.5);
+        assert!(plan[0].since_never);
+        let p = app.get_piece(1).unwrap();
+        seed_session(&app, "2026-10-18", 1, 25, 4, "");
+        let item = app
+            .score_piece(&p, "2026-10-20", coeffs, false)
+            .unwrap()
+            .unwrap();
+        assert!(item.conf_rated);
+        assert_eq!(item.conf, 4.0);
+        assert_eq!(item.since, 2);
+        seed_session(&app, "2026-10-20", 1, 0, 0, "skipped");
+        assert!(
+            app.score_piece(&p, "2026-10-20", coeffs, false)
+                .unwrap()
+                .is_none()
+        );
+        let item = app
+            .score_piece(&p, "2026-10-20", coeffs, true)
+            .unwrap()
+            .unwrap();
+        assert!(!item.practiced);
+        seed_session(&app, "2026-10-20", 1, 15, 0, "");
+        let item = app
+            .score_piece(&p, "2026-10-20", coeffs, true)
+            .unwrap()
+            .unwrap();
+        assert!(item.practiced);
+        assert_eq!(item.logged, 15);
+    }
+
+    #[test]
+    fn audition_readiness_rows() {
+        let app = test_app();
+        seed_audition(&app, 1, "2026-01-01", 3);
+        seed_audition(&app, 2, "2027-01-08", 3);
+        seed_audition(&app, 3, "2027-02-01", 3);
+        seed_piece(&app, 1, 3);
+        link(&app, 1, 2);
+        let pieces = vec![Piece {
+            id: 1,
+            auditions: vec![audition(2, "2027-01-08", 3)],
+            ..Default::default()
+        }];
+        let rows = app.audition_readiness("2026-10-20", &pieces, "en").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, 2);
+        assert_eq!(rows[0].pieces, 1);
+    }
+
+    // ---------- coverage batch: forecaster ----------
+
+    fn forecast_input(id: i64, auds: Vec<Audition>, conf: f64, last: &str) -> ForecastInput {
+        forecast_input_diff(id, auds, conf, last, 3)
+    }
+
+    fn forecast_input_diff(
+        id: i64,
+        auds: Vec<Audition>,
+        conf: f64,
+        last: &str,
+        diff: i64,
+    ) -> ForecastInput {
+        ForecastInput {
+            id,
+            auditions: auds,
+            conf,
+            diff,
+            last: last.to_string(),
+        }
+    }
+
+    fn forecaster(inputs: Vec<ForecastInput>) -> PlanForecaster {
+        PlanForecaster {
+            coeffs: test_app().get_coeffs().unwrap(),
+            inputs,
+            lang: "en".to_string(),
+        }
+    }
+
+    #[test]
+    fn score_on_windows() {
+        let f = forecaster(vec![]);
+        let past = forecast_input(1, vec![audition(1, "2026-01-01", 3)], 3.0, "");
+        assert!(f.score_on(&past, "2026-10-20").unwrap().is_none());
+        let future = forecast_input(1, vec![audition(1, "2026-11-01", 3)], 3.0, "");
+        assert!(f.score_on(&future, "2026-10-20").unwrap().is_some());
+        let ahead = forecast_input(1, vec![audition(1, "2026-11-01", 3)], 3.0, "2026-12-01");
+        assert!(f.score_on(&ahead, "2026-10-20").unwrap().is_some());
+        let two = forecast_input(
+            1,
+            vec![audition(1, "2026-12-01", 3), audition(2, "2026-10-25", 3)],
+            3.0,
+            "2026-10-10",
+        );
+        assert!(f.score_on(&two, "2026-10-20").unwrap().is_some());
+    }
+
+    #[test]
+    fn entry_date_paths() {
+        let target = forecast_input(7, vec![audition(1, "2026-10-30", 5)], 2.0, "");
+        let f = forecaster(vec![target.clone()]);
+        let (day, _, reason) = f.entry_date(7, "2026-10-20").unwrap();
+        assert_eq!(day, "2026-10-21");
+        assert!(reason.contains("Aud1"));
+        let (day, score, reason) = f.entry_date(99, "2026-10-20").unwrap();
+        assert_eq!(day, "");
+        assert_eq!(score, 0.0);
+        assert_eq!(reason, "");
+        // Rivals hold their audition tomorrow; once it passes, the
+        // target enters and the reason names the rival event.
+        let weak = forecast_input_diff(7, vec![audition(1, "2026-10-30", 5)], 5.0, "2026-10-20", 1);
+        let mut inputs: Vec<ForecastInput> = (11..=18)
+            .map(|i| forecast_input_diff(i, vec![audition(100 + i, "2026-10-21", 5)], 1.0, "", 5))
+            .collect();
+        inputs.push(weak);
+        let f = forecaster(inputs);
+        let (day, _, reason) = f.entry_date(7, "2026-10-20").unwrap();
+        assert_eq!(day, "2026-10-22");
+        assert!(reason.contains("Aud111"));
+        // Nine stronger rivals share the target's audition day: the
+        // target never enters in time.
+        let weak = forecast_input_diff(7, vec![audition(1, "2026-10-30", 5)], 5.0, "2026-10-20", 1);
+        let mut inputs: Vec<ForecastInput> = (21..=29)
+            .map(|i| forecast_input_diff(i, vec![audition(200 + i, "2026-10-30", 5)], 1.0, "", 5))
+            .collect();
+        inputs.push(weak);
+        let f = forecaster(inputs);
+        let (day, _, _) = f.entry_date(7, "2026-10-20").unwrap();
+        assert_eq!(day, "");
+    }
+
+    #[test]
+    fn entry_date_stops_when_the_piece_expires() {
+        let target =
+            forecast_input_diff(7, vec![audition(1, "2026-10-21", 5)], 5.0, "2026-10-20", 1);
+        let mut inputs: Vec<ForecastInput> = (21..=29)
+            .map(|i| forecast_input_diff(i, vec![audition(300 + i, "2026-10-25", 5)], 1.0, "", 5))
+            .collect();
+        inputs.push(target);
+        let f = forecaster(inputs);
+        let (day, _, _) = f.entry_date(7, "2026-10-20").unwrap();
+        assert_eq!(day, "");
+    }
+
+    #[test]
+    fn forecaster_snapshots_inputs() {
+        let app = test_app();
+        seed_audition(&app, 1, "2026-11-01", 4);
+        seed_audition(&app, 2, "2026-01-01", 4);
+        seed_piece(&app, 1, 3);
+        seed_piece(&app, 2, 2);
+        seed_piece(&app, 3, 1);
+        link(&app, 1, 1);
+        link(&app, 2, 2);
+        link(&app, 3, 1);
+        seed_session(&app, "2026-10-18", 1, 25, 4, "");
+        seed_session(&app, "2026-10-19", 1, 10, 0, "");
+        let f = app.new_plan_forecaster("2026-10-20").unwrap();
+        assert_eq!(f.inputs.len(), 2);
+        let one = f.inputs.iter().find(|i| i.id == 1).unwrap();
+        assert_eq!(one.conf, 4.0);
+        assert_eq!(one.last, "2026-10-19");
+        let three = f.inputs.iter().find(|i| i.id == 3).unwrap();
+        assert_eq!(three.conf, 2.5);
+        assert_eq!(three.last, "");
+    }
+
+    #[test]
+    fn upload_mock_item_ownership() {
+        let app = test_app();
+        seed_audition(&app, 1, "2027-01-08", 3);
+        seed_piece(&app, 1, 3);
+        seed_piece(&app, 2, 3);
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO mocks (id, audition_id, date) VALUES (1, 1, '2026-10-20')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO mock_items (id, mock_id, piece_id, position) VALUES (1, 1, 1, 1), (2, 1, 2, 2)",
+            [],
+        )
+        .unwrap();
+        drop(db);
+        let fields = |v: &str| {
+            let mut m = HashMap::new();
+            m.insert("mock_item_id".to_string(), v.to_string());
+            m
+        };
+        assert_eq!(upload_mock_item(&app, &fields(" 1 "), 1), Some(1));
+        assert_eq!(upload_mock_item(&app, &fields("2"), 1), None);
+        assert_eq!(upload_mock_item(&app, &fields("x"), 1), None);
+        assert_eq!(upload_mock_item(&app, &fields(""), 1), None);
+        assert_eq!(upload_mock_item(&app, &fields("99"), 1), None);
+        assert_eq!(upload_mock_item(&app, &HashMap::new(), 1), None);
+    }
+
+    // ---------- coverage batch: today plan sections ----------
+
+    fn plan_item(id: i64, minutes: i64, practiced: bool) -> PlanItem {
+        PlanItem {
+            piece: Piece {
+                id,
+                composer: format!("C{id}"),
+                work: format!("W{id}"),
+                ..Default::default()
+            },
+            minutes,
+            practiced,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn auto_skip_drops_the_tail() {
+        let app = test_app();
+        seed_piece(&app, 1, 3);
+        seed_piece(&app, 2, 3);
+        seed_piece(&app, 3, 3);
+        let items = vec![
+            plan_item(1, 60, false),
+            plan_item(2, 60, false),
+            plan_item(3, 60, false),
+        ];
+        let kept = app
+            .auto_skip_overflow(items, 60, AUTO_SKIP_GRACE_MIN, "2026-10-20")
+            .unwrap();
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].piece.id, 1);
+        let marks = app.skip_markers_today("2026-10-20").unwrap();
+        assert_eq!(marks.get(&3), Some(&true));
+        assert_eq!(marks.get(&2), Some(&true));
+        let items = vec![plan_item(1, 60, true), plan_item(2, 60, false)];
+        let kept = app
+            .auto_skip_overflow(items, 0, AUTO_SKIP_GRACE_MIN, "2026-10-20")
+            .unwrap();
+        assert_eq!(kept.len(), 1);
+        assert!(kept[0].practiced);
+    }
+
+    #[test]
+    fn fill_today_plan_branches() {
+        let app = test_app();
+        let mut data = TodayData {
+            baseline: vec![Piece::default()],
+            has_availability: true,
+            budget: 120,
+            ..Default::default()
+        };
+        app.fill_today_plan(&mut data, &[], "2026-10-20").unwrap();
+        assert!(data.no_budget);
+        assert!(data.items.is_empty());
+        let mut data = TodayData {
+            has_availability: true,
+            budget: 0,
+            ..Default::default()
+        };
+        app.fill_today_plan(&mut data, &[], "2026-10-20").unwrap();
+        assert!(data.no_budget);
+        seed_audition(&app, 1, "2026-11-01", 4);
+        seed_piece(&app, 1, 3);
+        link(&app, 1, 1);
+        let avail = vec![Availability {
+            start_min: 0,
+            end_min: 1439,
+            kind: "free".into(),
+            ..Default::default()
+        }];
+        let mut data = TodayData {
+            has_availability: true,
+            budget: 120,
+            ..Default::default()
+        };
+        app.fill_today_plan(&mut data, &avail, "2026-10-20")
+            .unwrap();
+        assert_eq!(data.items.len(), 1);
+        assert_eq!(data.open_count, 1);
+        assert!(data.items[0].minutes > 0);
+    }
+
+    #[test]
+    fn today_sections_fill() {
+        let app = test_app();
+        seed_piece(&app, 1, 3);
+        seed_piece(&app, 2, 3);
+        seed_piece(&app, 3, 3);
+        seed_piece(&app, 4, 3);
+        seed_session(&app, "2026-10-20", 1, 0, 0, "skipped");
+        seed_session(&app, "2026-10-20", 2, 0, 0, "auto-skipped");
+        seed_session(&app, "2026-10-20", 3, 0, 0, "skipped");
+        seed_session(&app, "2026-10-20", 3, 0, 0, "auto-skipped");
+        seed_session(&app, "2026-10-20", 4, 45, 3, "");
+        let marks = app.skip_markers_today("2026-10-20").unwrap();
+        assert_eq!(marks.get(&1), Some(&false));
+        assert_eq!(marks.get(&2), Some(&true));
+        assert_eq!(marks.get(&3), Some(&false));
+        let pieces = vec![
+            Piece {
+                id: 1,
+                ..Default::default()
+            },
+            Piece {
+                id: 2,
+                ..Default::default()
+            },
+            Piece {
+                id: 3,
+                ..Default::default()
+            },
+            Piece {
+                id: 4,
+                ..Default::default()
+            },
+        ];
+        let mut data = TodayData::default();
+        let by_id = app
+            .today_extra_done(&mut data, &pieces, "2026-10-20")
+            .unwrap();
+        assert_eq!(data.extra_done.len(), 1);
+        assert_eq!(data.extra_done[0].logged, 45);
+        app.today_skipped(&mut data, &by_id, "2026-10-20").unwrap();
+        assert_eq!(data.skipped.len(), 3);
+        assert!(data.skipped[0].auto);
+        assert_eq!(data.skipped[0].p.id, 2);
+        app.stamp_today_levels(&mut data).unwrap();
+    }
+
+    #[test]
+    fn baseline_split_and_skipped_sort() {
+        let mut data = TodayData::default();
+        let pieces = vec![
+            Piece {
+                id: 1,
+                has_active: true,
+                ..Default::default()
+            },
+            Piece {
+                id: 2,
+                has_active: true,
+                ..Default::default()
+            },
+            Piece {
+                id: 3,
+                has_active: false,
+                ..Default::default()
+            },
+        ];
+        let valued: HashSet<i64> = [2].into_iter().collect();
+        fill_baseline(&mut data, &pieces, &valued);
+        assert_eq!(data.baseline_total, 2);
+        assert_eq!(data.baseline_done, 1);
+        assert_eq!(data.baseline.len(), 1);
+        let mut entries = vec![
+            SkippedEntry {
+                p: Piece {
+                    composer: "B".into(),
+                    ..Default::default()
+                },
+                auto: true,
+            },
+            SkippedEntry {
+                p: Piece {
+                    composer: "A".into(),
+                    ..Default::default()
+                },
+                auto: false,
+            },
+        ];
+        sort_skipped(&mut entries);
+        assert!(entries[0].auto);
+        assert!(!entries[1].auto);
+    }
 }

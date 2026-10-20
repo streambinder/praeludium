@@ -309,4 +309,58 @@ mod tests {
         assert_eq!(lang_choice(Some("pt")), "pt");
         assert_eq!(lang_choice(None), "auto");
     }
+
+    #[test]
+    fn fmt_arg_from_primitives() {
+        assert_eq!(FmtArg::from(3i32), FmtArg::Int(3));
+        assert_eq!(FmtArg::from(4usize), FmtArg::Int(4));
+        assert_eq!(FmtArg::from("s"), FmtArg::Str("s".to_string()));
+        assert_eq!(FmtArg::from("s".to_string()), FmtArg::Str("s".to_string()));
+    }
+
+    #[test]
+    fn format_go_edge_verbs() {
+        assert_eq!(format_go("%d", &[FmtArg::Str("x".into())]), "x");
+        assert_eq!(format_go("%s", &[FmtArg::Int(7)]), "7");
+        assert_eq!(format_go("%d", &[]), "%!d(MISSING)");
+        assert_eq!(format_go("%s", &[]), "%!s(MISSING)");
+        assert_eq!(format_go("%x", &[]), "%x");
+        assert_eq!(format_go("end%", &[]), "end%");
+    }
+
+    #[test]
+    fn accept_language_param_edges() {
+        assert_eq!(accept_language("en;q=abc"), "en");
+        assert_eq!(accept_language("it;level=1"), "it");
+        assert_eq!(accept_language(" , en"), "en");
+    }
+
+    #[test]
+    fn lang_fallbacks_reach_english() {
+        assert_eq!(lang_for(Some("xx"), None), "en");
+        assert_eq!(lang_for(None, Some("xx")), "en");
+        assert_eq!(lang_for(None, Some("de")), "de");
+        assert_eq!(lang_choice(Some("xx")), "auto");
+    }
+
+    #[test]
+    fn lang_names_cover_the_catalog() {
+        for (lang, name) in [
+            ("en", "English"),
+            ("it", "Italiano"),
+            ("es", "Español"),
+            ("fr", "Français"),
+            ("de", "Deutsch"),
+            ("pt", "Português"),
+        ] {
+            assert_eq!(lang_name(lang), name);
+        }
+        assert_eq!(lang_name("xx"), "");
+    }
+
+    #[test]
+    fn plural_other_and_decimal_comma() {
+        assert!(tr_plural("en", "today.plan_meta", 2, &[]).starts_with('2'));
+        assert_eq!(decimal("fr", 0.5), "0,5");
+    }
 }
