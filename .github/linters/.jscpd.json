@@ -1,6 +1,14 @@
 {
   "threshold": 5,
   "reporters": ["consoleFull"],
-  "ignore": ["**/__snapshots__/**", "**/node_modules/**"],
+  "ignore": [
+    "**/__snapshots__/**",
+    "**/node_modules/**",
+    "**/.specify/commands/**",
+    "**/.specify/integrations/**",
+    "**/.specify/scripts/**",
+    "**/.specify/templates/**",
+    "**/.specify/workflows/**"
+  ],
   "absolute": true
 }
