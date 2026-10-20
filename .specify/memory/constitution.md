@@ -1,50 +1,109 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# Præludium Constitution
+
+**Status**: Ratified by the repository owner on 2026-10-20.
+
+The canonical standard for this repository is the unciae golden standard
+(`streambinder/unciae`, file `AGENTS.md`). This constitution restates the
+rules of that standard that bind this repository, in the form that the
+Spec Kit workflow checks. When a rule here and the canonical standard
+disagree, the canonical standard wins and this document gets amended.
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. One Repository, One Deployable Unit
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+The repository builds one application and one container image. The root
+stays minimal: a new root entry needs a justification. Configuration
+files live in their conventional locations, never ad hoc.
+(unciae §1, §2)
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### II. CI Is the Source of Truth
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+A change is done when the continuous integration pipeline is green.
+Local checks mirror the pipeline; local checks never replace the
+pipeline. Do not push on red. (unciae §1, §17, §18)
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### III. One Linting System
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+super-linter is the linter. Its configuration files live only under
+`.github/linters/`. No linter configuration sits at the repository
+root, not even as a symlink. Format code with the canonical formatter
+of the language before every push: for Rust, `cargo fmt` and
+`cargo clippy`. (unciae §3)
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### IV. Tests and the Coverage Gate
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+Unit tests live next to the code that the tests cover, in the layout
+that the toolchain dictates. Integration tests live separately. CI
+runs the tests on every push. A failing test blocks the merge. CI
+measures coverage on every push. The minimum line coverage is 90%.
+Coverage below 90% blocks the merge. Non-test code never changes to
+satisfy a test; the test changes instead. (unciae §15)
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### V. Minimal Owned Surface
+
+The repository owns its product logic and nothing else. For every other
+functionality, first simplify the problem away, then delegate to a
+specialized library with an established reputation. Pin exact
+dependency versions where possible. (unciae §16, §16.1)
+
+### VI. Commits and Pull Requests
+
+Commits follow Conventional Commits: one logical change per commit,
+signed, with no artificial-intelligence attribution trailers. Commit
+messages and pull request descriptions never name a verification
+subject; describe the class of the subject and the outcome instead.
+The owner merges. (unciae §7, §19, §24)
+
+### VII. Containers and Releases
+
+Build for linux/arm64 only. Pin every action and base image. Publish
+never runs on a pull request. (unciae §5, §10, §11)
+
+### VIII. Writing and Consistency
+
+Technical writing follows ASD-STE100: short sentences, one term for
+one concept, active voice. A change follows the conventions of the
+file that the change touches. Do not reformat parts that the change
+does not touch. (unciae §22, §23)
+
+## Project Constraints
+
+These constraints are decisions of the repository owner for this
+project. Each constraint stands until the owner replaces it with a
+recorded decision.
+
+### Production Care
+
+The application serves a real user every day. Before every deploy,
+take a database backup and verify its snapshot. After every deploy,
+verify the recreated container and the real live content. Never write
+on production data to test. Never change production without a local
+quality check first.
+
+### Data Compatibility
+
+The production SQLite file is a contract. The application must open
+the existing file without data loss. A schema change needs a recorded
+decision and a migration path before implementation.
+
+### Specification Cycle
+
+Every bounded change follows the Spec Kit cycle: specification,
+clarification, plan, tasks, analysis, implementation, convergence.
+The specification describes the next change, never the whole system
+retroactively. Completed feature directories stay as immutable
+historical records. A significant decision goes to the decision
+register under `.specify/memory/decisions/`, in MADR format, one file
+per decision. An accepted decision is reused; a replaced decision
+stays in the register and names its successor.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+The owner ratifies this constitution and every amendment. The agent
+drafts amendments and records the ratified text. Every pull request
+review checks compliance with this constitution. A rule that proves
+wrong is amended through a recorded decision; the rule is never
+silently ignored.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-20
