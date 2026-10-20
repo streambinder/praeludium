@@ -57,9 +57,9 @@ adds tests and re-measures.
 
 ## Phase 5: Pull Request and Convergence
 
-- [ ] T013 [US1] Open the pull request with the spec, the plan, the
+- [x] T013 [US1] Open the pull request with the spec, the plan, the
       tasks, the tests, and the gate value; the pipeline is green
-- [ ] T014 [US1] Converge: compare spec.md against the delivered
+- [x] T014 [US1] Converge: compare spec.md against the delivered
       change, close every gap in the artifacts, and mark the
       specification complete
 
