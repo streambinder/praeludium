@@ -72,7 +72,7 @@ jobs:
           cargo test --locked
           echo Checking coverage...
           cargo install cargo-llvm-cov --locked
-          cargo llvm-cov --locked --fail-under-lines 80
+          cargo llvm-cov --locked --fail-under-lines 90
       - run: cargo build --release --locked
   docker:
     needs: [rust]

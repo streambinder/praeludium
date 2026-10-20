@@ -472,4 +472,60 @@ mod tests {
             tr("en", "since.days_ago", &[FmtArg::Int(5)])
         );
     }
+
+    #[test]
+    fn args_to_fmt_converts_each_json_kind() {
+        let out = args_to_fmt(&[
+            Value::from(7),
+            Value::from(2.5f64),
+            Value::from(3.0f64),
+            Value::from(u64::MAX),
+            Value::from("text"),
+            Value::from(true),
+        ]);
+        assert_eq!(out[0], FmtArg::Int(7));
+        assert_eq!(out[1], FmtArg::Str("2.5".to_string()));
+        assert_eq!(out[2], FmtArg::Int(3));
+        assert_eq!(out[3], FmtArg::Int(-1));
+        assert_eq!(out[4], FmtArg::Str("text".to_string()));
+        assert_eq!(out[5], FmtArg::Str("True".to_string()));
+    }
+
+    #[test]
+    fn render_page_falls_back_and_errors() {
+        let data = Value::from(minijinja::value::Serde(serde_json::json!({})));
+        assert!(render_page("xx", "layout.html", data.clone()).is_ok());
+        assert!(render_page("en", "no-such-page.html", data).is_err());
+    }
+
+    #[test]
+    fn date_fallbacks_and_labels() {
+        assert_eq!(date_in("fr", "2026-10-14"), "mercredi 14 octobre 2026");
+        assert_eq!(date_in("xx", "2026-10-14"), "Wednesday 14 October 2026");
+        assert_eq!(date_dmy("not-a-date"), "not-a-date");
+        assert_eq!(conf_label("en", 0.5, true), tr("en", "conf.untouched", &[]));
+        assert_eq!(since_label("en", 0, false), tr("en", "since.today", &[]));
+        assert_eq!(
+            since_label("en", 1, false),
+            tr("en", "since.yesterday", &[])
+        );
+        assert_eq!(pct(0.5), 50);
+        assert_eq!(pct(0.0), 0);
+    }
+
+    #[test]
+    fn url_parts_whole_url_edges() {
+        assert_eq!(
+            url_parts("https://"),
+            ("https://".to_string(), String::new())
+        );
+        assert_eq!(
+            url_parts("https:///x"),
+            ("https:///x".to_string(), String::new())
+        );
+        assert_eq!(
+            url_parts("https://example.com"),
+            ("https://example.com".to_string(), String::new())
+        );
+    }
 }

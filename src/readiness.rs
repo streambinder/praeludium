@@ -295,4 +295,152 @@ mod tests {
         assert_eq!(pts[0].bpm, 60);
         assert_eq!(pts[1].bpm, 70);
     }
+
+    fn test_app() -> App {
+        App {
+            db: std::sync::Mutex::new(crate::db::open_memory().unwrap()),
+            data_dir: std::path::PathBuf::from("/tmp"),
+        }
+    }
+
+    fn seed(app: &App) {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO auditions (id, name, audition_date) VALUES (1, 'A', '2027-01-08')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO pieces (id, composer, work) VALUES (1, 'C1', 'W1'), (2, 'C2', 'W2')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO piece_audition (piece_id, audition_id) VALUES (1, 1), (2, 1)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO sessions (date, piece_id, minutes, confidence, bpm) VALUES \
+             ('2026-10-10', 1, 30, 4, 72), ('2026-10-01', 1, 20, 3, 60)",
+            [],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn tempo_chart_single_point_and_narrow_range() {
+        let one = vec![TempoPoint {
+            date: "2026-10-01".into(),
+            bpm: 60,
+        }];
+        let chart = build_tempo_chart(&one, 0, false);
+        assert!(chart.single);
+        assert_eq!(chart.first_x, chart.last_x);
+        let close = vec![
+            TempoPoint {
+                date: "2026-10-01".into(),
+                bpm: 60,
+            },
+            TempoPoint {
+                date: "2026-10-02".into(),
+                bpm: 63,
+            },
+        ];
+        let chart = build_tempo_chart(&close, 0, false);
+        assert!(!chart.has_target);
+        assert_eq!(chart.points.len(), 2);
+    }
+
+    #[test]
+    fn latest_bpm_reads_the_newest_session() {
+        let app = test_app();
+        assert_eq!(app.latest_bpm(1).unwrap(), None);
+        seed(&app);
+        assert_eq!(app.latest_bpm(1).unwrap(), Some(72));
+        assert_eq!(app.latest_bpm(2).unwrap(), None);
+    }
+
+    #[test]
+    fn coverage_counts_touched_pieces() {
+        let app = test_app();
+        let aud = Audition {
+            id: 9,
+            name: "Empty".into(),
+            ..Default::default()
+        };
+        let row = app.readiness_coverage(&aud, "2026-01-01").unwrap();
+        assert_eq!(row.pct, 0);
+        assert_eq!(row.val, "");
+        seed(&app);
+        let aud = Audition {
+            id: 1,
+            name: "A".into(),
+            ..Default::default()
+        };
+        let row = app.readiness_coverage(&aud, "2026-01-01").unwrap();
+        assert_eq!(row.val, "1/2 · 50%");
+    }
+
+    #[test]
+    fn conf_rows_and_study_time_read_sessions() {
+        let app = test_app();
+        seed(&app);
+        let rows = app.audition_conf_rows(1).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].conf, 3);
+        let (all, week) = app.readiness_study_time(1, "2026-10-05").unwrap();
+        assert_eq!(all, 50);
+        assert_eq!(week, 30);
+        let (all, _) = app.readiness_study_time(9, "2026-10-05").unwrap();
+        assert_eq!(all, 0);
+    }
+
+    #[test]
+    fn tempo_readiness_counts_targets() {
+        let app = test_app();
+        seed(&app);
+        let pieces = vec![
+            Piece {
+                id: 1,
+                target_bpm: Some(70),
+                ..Default::default()
+            },
+            Piece {
+                id: 2,
+                target_bpm: Some(80),
+                ..Default::default()
+            },
+            Piece {
+                id: 3,
+                target_bpm: None,
+                ..Default::default()
+            },
+        ];
+        let (count, at) = app.readiness_tempo(&pieces).unwrap();
+        assert_eq!(count, 2);
+        assert_eq!(at, 1);
+    }
+
+    #[test]
+    fn weakest_ranks_and_formats_rows() {
+        let app = test_app();
+        let pieces = vec![
+            Piece {
+                id: 1,
+                composer: "C1".into(),
+                work: "W1".into(),
+                ..Default::default()
+            },
+            Piece {
+                id: 2,
+                composer: "C2".into(),
+                work: "W2".into(),
+                ..Default::default()
+            },
+        ];
+        let rows = app.readiness_weakest(&pieces).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].title, "C1 — W1");
+    }
 }

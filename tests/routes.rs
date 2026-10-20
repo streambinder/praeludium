@@ -747,6 +747,158 @@ async fn mock_with_round_and_rerate_guard() {
 }
 
 #[tokio::test]
+async fn auditions_list_and_diary_markers() {
+    let (r, app) = test_app();
+    // One concluded audition (past, not archived) and one upcoming
+    // with a linked piece and a link row.
+    r.clone()
+        .oneshot(form_req(
+            "/auditions",
+            "name=Past+Cup&date=2020-01-10&weight=2",
+        ))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/auditions",
+            "name=Next+Cup&date=2027-01-10&weight=4&link_url=https://example.org/x&link_label=Bando",
+        ))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Bach&work=Suite&kind=solo&difficulty=3&audition=2",
+        ))
+        .await
+        .unwrap();
+    let resp = r.clone().oneshot(req("GET", "/auditions")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert!(body.contains("Past Cup") && body.contains("Next Cup"));
+    // Diary day with every marker kind on a fixed past date.
+    let day = "2026-10-12";
+    seed_session(&app, day, 1, 0, 0, "skipped");
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Vivaldi&work=Concerto&kind=solo&difficulty=2",
+        ))
+        .await
+        .unwrap();
+    seed_session(&app, day, 2, 0, 0, "auto-skipped");
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Haydn&work=Sonata&kind=solo&difficulty=2",
+        ))
+        .await
+        .unwrap();
+    seed_session(&app, day, 3, 0, 0, "auto-skipped");
+    seed_session(&app, day, 3, 25, 3, "");
+    let resp = r
+        .clone()
+        .oneshot(req("GET", &format!("/diary/day/{day}")))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert!(body.contains("Bach"), "skipped card: {body}");
+    assert!(body.contains("Vivaldi"), "auto skipped card: {body}");
+    assert!(body.contains("Haydn"), "practiced entry: {body}");
+    // The diary list groups the same sessions.
+    let resp = r.clone().oneshot(req("GET", "/diary")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(body_string(resp).await.contains("Haydn"));
+    let resp = r.clone().oneshot(req("GET", "/diary?c=2")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn piece_detail_score_and_availability_validation() {
+    let r = test_router();
+    r.clone()
+        .oneshot(form_req("/auditions", "name=Cup&date=2027-01-10&weight=4"))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Bach&work=Suite&kind=solo&difficulty=3&audition=1",
+        ))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Solo&work=Etude&kind=solo&difficulty=1",
+        ))
+        .await
+        .unwrap();
+    // A piece in the plan shows its score panel; a piece without
+    // auditions renders the plain page.
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/diary/piece/1"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(body_string(resp).await.contains("Bach"));
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/diary/piece/2"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    // Availability validation: bad clock values and empty spans.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/availability",
+            "date=2026-10-20&start=25:00&end=26:00&label=",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/availability",
+            "date=2026-10-20&start=10:00&end=10:00&label=",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let resp = r
+        .clone()
+        .oneshot(form_req("/availability", "start=09:00&end=10:00&label=x"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let resp = r
+        .clone()
+        .oneshot(form_req("/availability/delete", "id=0"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/auditions/999/readiness"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    // Home in another language through the cookie.
+    let localized = Request::builder()
+        .method("GET")
+        .uri("/")
+        .header(header::COOKIE, "lang=de")
+        .body(Body::empty())
+        .unwrap();
+    let resp = r.clone().oneshot(localized).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn recording_delete_flow() {
     let dir = std::env::temp_dir().join(format!("praeludium-test-del-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
