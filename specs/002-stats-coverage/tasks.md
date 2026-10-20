@@ -51,9 +51,9 @@ warnings`
 
 ## Phase 6: Pull Request and Convergence
 
-- [ ] T009 [US1] Open the pull request with the spec, the plan,
+- [x] T009 [US1] Open the pull request with the spec, the plan,
       the tasks, and the tests; the pipeline is green
-- [ ] T010 [US1] Converge: compare spec.md against the delivered
+- [x] T010 [US1] Converge: compare spec.md against the delivered
       change, close every gap in the artifacts, and mark the
       specification complete
 
