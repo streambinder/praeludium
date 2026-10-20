@@ -98,6 +98,41 @@ register under `.specify/memory/decisions/`, in MADR format, one file
 per decision. An accepted decision is reused; a replaced decision
 stays in the register and names its successor.
 
+## Working Agreements
+
+This section restates the operative form of the principles, so the
+repository stays self-contained for the points that the golden
+standard states in full. A new session applies these agreements
+without further sources.
+
+### Branches and commits
+
+- A feature branch carries the name `feat/<short-name>`.
+- A commit follows Conventional Commits. The subject holds at most
+  72 characters, uses the imperative, carries no terminal period,
+  and contains none of the characters `()[]"'`/,:;`.
+- A commit body holds one sentence of at most 100 characters and
+  ends with a period. The body states why, not what.
+- One logical change makes one commit.
+- A fix for a red feature branch amends the failing commit. The
+  push uses force with an explicit lease that names the remote
+  commit. Nobody amends or force-pushes the default branch.
+
+### Text and formatting
+
+- Prettier formats every authored Markdown file. The author runs
+  prettier, in the major version the lint image bundles, on each
+  authored file before the push.
+- Codespell checks every text file in CI. Authored text passes
+  codespell before the push.
+
+### Test fixtures
+
+- A test that needs an application instance builds the instance in
+  memory: an `App` value with a mutex over `open_memory()` and a
+  temporary data directory. The test modules of `src/db.rs`,
+  `src/readiness.rs`, and `src/mocks.rs` hold the pattern.
+
 ## Governance
 
 The owner ratifies this constitution and every amendment. The agent
@@ -106,4 +141,4 @@ review checks compliance with this constitution. A rule that proves
 wrong is amended through a recorded decision; the rule is never
 silently ignored.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-20
+**Version**: 1.1.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-20
