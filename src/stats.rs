@@ -783,4 +783,318 @@ mod tests {
         assert_eq!(chart.bars[0].count, 1);
         assert_eq!(chart.bars[4].count, 1);
     }
+
+    // ---------- coverage batch: pure functions ----------
+
+    #[test]
+    fn percentile_exact_rank_and_bounds() {
+        assert_eq!(percentile(&[1.0, 2.0, 3.0], 50.0), 2.0);
+        assert_eq!(percentile(&[1.0, 2.0, 3.0], 0.0), 1.0);
+        assert_eq!(percentile(&[1.0, 2.0, 3.0], 100.0), 3.0);
+    }
+
+    fn day(date: &str, minutes: i64) -> DayTotal {
+        DayTotal {
+            date: date.to_string(),
+            minutes,
+        }
+    }
+
+    #[test]
+    fn aggregate_weeks_skips_bad_rows() {
+        let days = vec![
+            day("2026-10-12", 0),
+            day("2026-10-12", -5),
+            day("not-a-date", 30),
+            day("2026-10-12", 60),
+            day("2026-10-19", 90),
+        ];
+        let weeks = aggregate_weeks(&days);
+        assert_eq!(weeks.len(), 2);
+        assert_eq!(weeks[0].days, 1);
+        assert!((weeks[1].mean - 1.5).abs() < 1e-9);
+        assert!(aggregate_weeks(&[]).is_empty());
+    }
+
+    #[test]
+    fn aggregate_conf_weeks_skips_and_means() {
+        let rows = vec![
+            ConfSession {
+                date: "2026-10-12".into(),
+                conf: 0,
+            },
+            ConfSession {
+                date: "2026-10-12".into(),
+                conf: -1,
+            },
+            ConfSession {
+                date: "not-a-date".into(),
+                conf: 3,
+            },
+            ConfSession {
+                date: "2026-10-12".into(),
+                conf: 4,
+            },
+            ConfSession {
+                date: "2026-10-14".into(),
+                conf: 2,
+            },
+            ConfSession {
+                date: "2026-10-19".into(),
+                conf: 5,
+            },
+        ];
+        let weeks = aggregate_conf_weeks(&rows);
+        assert_eq!(weeks.len(), 2);
+        assert!((weeks[0].mean - 3.0).abs() < 1e-9);
+        assert!((weeks[1].mean - 5.0).abs() < 1e-9);
+        assert!(aggregate_conf_weeks(&[]).is_empty());
+    }
+
+    #[test]
+    fn week_counts_ordering_and_empty() {
+        // Later week first: the first and last markers move both ways.
+        let days = vec![
+            day("2026-10-12", 10),
+            day("2026-09-28", 10),
+            day("2026-10-12", 0),
+            day("not-a-date", 10),
+        ];
+        let counts = week_counts(&days);
+        assert_eq!(counts.len(), 3);
+        assert_eq!(counts[0].monday, "2026-09-28");
+        assert_eq!(counts[2].days, 1);
+        // No usable day at all: no first, no last, no rows.
+        let days = vec![day("not-a-date", 10), day("2026-10-12", 0)];
+        assert!(week_counts(&days).is_empty());
+        assert!(week_counts(&[]).is_empty());
+    }
+
+    #[test]
+    fn streak_fallbacks() {
+        let days = vec![day("2026-10-14", 10)];
+        assert_eq!(current_streak(&days, "not-a-date"), 0);
+        assert_eq!(current_streak(&[], "2026-10-14"), 0);
+        assert_eq!(current_streak(&days, "2026-10-14"), 1);
+    }
+
+    // ---------- coverage batch: chart builders ----------
+
+    #[test]
+    fn dist_chart_zero_and_empty() {
+        let chart = build_dist_chart(&[0, -10, 20]);
+        assert_eq!(chart.bars.len(), 5);
+        assert_eq!(chart.bars[0].count, 0);
+        assert_eq!(chart.bars[1].count, 1);
+        let chart = build_dist_chart(&[]);
+        assert_eq!(chart.bars.len(), 5);
+        assert!(chart.bars.iter().all(|b| b.count == 0 && b.h == "0.0"));
+    }
+
+    #[test]
+    fn week_chart_empty_single_and_floor() {
+        let chart = build_week_chart(&[], "en");
+        assert!(chart.dots.is_empty());
+        assert_eq!(chart.grid.len(), 4);
+        assert!(!chart.single);
+        let one = vec![WeekPoint {
+            monday: "2026-10-12".into(),
+            mean: 1.0,
+            p95: 2.0,
+            p05: 0.5,
+            days: 2,
+        }];
+        let chart = build_week_chart(&one, "en");
+        assert!(chart.single);
+        assert_eq!(chart.first_x, chart.last_x);
+        let zero = vec![WeekPoint {
+            monday: "2026-10-12".into(),
+            mean: 0.0,
+            p95: 0.0,
+            p05: 0.0,
+            days: 1,
+        }];
+        let chart = build_week_chart(&zero, "it");
+        assert_eq!(chart.dots.len(), 1);
+        assert_eq!(chart.grid.len(), 4);
+    }
+
+    #[test]
+    fn conf_chart_shapes() {
+        let chart = build_conf_chart(&[], "en");
+        assert_eq!(chart.grid.len(), 6);
+        assert!(chart.dots.is_empty());
+        let one = vec![ConfWeek {
+            monday: "2026-10-12".into(),
+            mean: 3.0,
+        }];
+        let chart = build_conf_chart(&one, "en");
+        assert!(chart.single);
+        let two = vec![
+            ConfWeek {
+                monday: "2026-10-12".into(),
+                mean: 3.0,
+            },
+            ConfWeek {
+                monday: "2026-10-19".into(),
+                mean: 4.0,
+            },
+        ];
+        let chart = build_conf_chart(&two, "en");
+        assert_eq!(chart.dots.len(), 2);
+        assert!(chart.mean_pts.contains(' '));
+        assert!(!chart.single);
+    }
+
+    #[test]
+    fn const_chart_labels_and_zero() {
+        assert!(build_const_chart(&[]).bars.is_empty());
+        let first = chrono::NaiveDate::from_ymd_opt(2026, 9, 7).unwrap();
+        let counts: Vec<WeekCount> = (0..10)
+            .map(|i| WeekCount {
+                monday: (first + chrono::Duration::days(7 * i))
+                    .format("%Y-%m-%d")
+                    .to_string(),
+                days: 0,
+            })
+            .collect();
+        let chart = build_const_chart(&counts);
+        assert_eq!(chart.bars.len(), 10);
+        assert!(chart.bars.iter().all(|b| b.h == "0.0"));
+        // Step is 2 for ten bars: odd bars stay unlabeled, the last
+        // bar always carries its label.
+        assert_eq!(chart.bars[1].label, "");
+        assert!(!chart.bars[9].label.is_empty());
+        let counts = vec![WeekCount {
+            monday: "2026-10-12".into(),
+            days: 3,
+        }];
+        let chart = build_const_chart(&counts);
+        assert_eq!(chart.bars[0].label, "12/10");
+        assert_eq!(chart.bars[0].count, 3);
+    }
+
+    // ---------- coverage batch: App aggregations ----------
+
+    fn test_app() -> App {
+        App {
+            db: std::sync::Mutex::new(crate::db::open_memory().unwrap()),
+            data_dir: std::path::PathBuf::from("/tmp"),
+        }
+    }
+
+    fn rel_day(offset: i64) -> String {
+        let t = chrono::NaiveDate::parse_from_str(&crate::db::today_str(), "%Y-%m-%d").unwrap();
+        (t + chrono::Duration::days(offset))
+            .format("%Y-%m-%d")
+            .to_string()
+    }
+
+    fn seed_stats(app: &App) {
+        let db = app.db.lock().unwrap();
+        for (id, name, offset, archived) in [
+            (1, "A1", 30, false),
+            (2, "A2", 40, false),
+            (3, "A3", 30, true),
+            (4, "A4", -30, false),
+        ] {
+            db.execute(
+                "INSERT INTO auditions (id, name, audition_date, archived_at) VALUES (?, ?, ?, ?)",
+                params![
+                    id,
+                    name,
+                    rel_day(offset),
+                    archived.then_some("2026-01-01T00:00:00Z")
+                ],
+            )
+            .unwrap();
+        }
+        for (id, archived) in [(1, false), (2, false), (3, true), (4, false)] {
+            db.execute(
+                "INSERT INTO pieces (id, composer, work, archived_at) VALUES (?, 'C', 'W', ?)",
+                params![id, archived.then_some("2026-01-01T00:00:00Z")],
+            )
+            .unwrap();
+        }
+        for (piece, audition) in [(1, 1), (2, 1), (2, 2), (3, 1), (1, 3), (1, 4), (4, 2)] {
+            db.execute(
+                "INSERT INTO piece_audition (piece_id, audition_id) VALUES (?, ?)",
+                params![piece, audition],
+            )
+            .unwrap();
+        }
+        for (offset, piece, minutes, conf) in [
+            (0, 1, 30, 4),
+            (-20, 1, 50, 5),
+            (-20, 2, 10, 3),
+            (0, 3, 99, 2),
+            (-20, 4, 15, 1),
+        ] {
+            db.execute(
+                "INSERT INTO sessions (date, piece_id, minutes, confidence, note) VALUES (?, ?, ?, ?, '')",
+                params![rel_day(offset), piece, minutes, conf],
+            )
+            .unwrap();
+        }
+        db.execute(
+            "INSERT INTO mocks (id, audition_id, date) VALUES (1, 1, ?)",
+            params![rel_day(-5)],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO mock_items (id, mock_id, piece_id, position) VALUES (1, 1, 2, 1)",
+            [],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn aggregations_on_a_seeded_database() {
+        let app = test_app();
+        seed_stats(&app);
+        let mut totals = app.piece_totals().unwrap();
+        totals.sort_unstable();
+        assert_eq!(totals, vec![10, 15, 80, 99]);
+        let days = app.day_totals().unwrap();
+        assert_eq!(days.len(), 2);
+        assert_eq!(days[0].minutes, 75);
+        assert_eq!(days[1].minutes, 129);
+        let rows = app.audition_time_rows().unwrap();
+        assert_eq!(rows.len(), 4);
+        assert_eq!(rows[0].name, "A1");
+        assert_eq!(rows[0].pct, 100);
+        assert_eq!(rows[0].val, "3:09h");
+        let a2 = rows.iter().find(|r| r.name == "A2").unwrap();
+        assert_eq!(a2.pct, 13);
+        let coverage = app.coverage_rows().unwrap();
+        assert_eq!(coverage.len(), 2);
+        let a1 = coverage.iter().find(|r| r.name == "A1").unwrap();
+        assert_eq!(a1.val, "2/2 · 100%");
+        let a2 = coverage.iter().find(|r| r.name == "A2").unwrap();
+        assert_eq!(a2.val, "1/2 · 50%");
+        let stats = app.diary_stats("en").unwrap();
+        assert!(stats.has_dist);
+        assert_eq!(stats.dist_pieces, 4);
+        assert!(stats.has_weeks);
+        assert!(stats.has_const);
+        assert!(stats.has_conf);
+        assert_eq!(stats.streak, 1);
+        assert_eq!(stats.auditions.len(), 4);
+        assert_eq!(stats.coverage.len(), 2);
+    }
+
+    #[test]
+    fn aggregations_on_an_empty_database() {
+        let app = test_app();
+        assert!(app.piece_totals().unwrap().is_empty());
+        assert!(app.day_totals().unwrap().is_empty());
+        assert!(app.audition_time_rows().unwrap().is_empty());
+        assert!(app.coverage_rows().unwrap().is_empty());
+        let stats = app.diary_stats("en").unwrap();
+        assert!(!stats.has_dist);
+        assert!(!stats.has_weeks);
+        assert!(!stats.has_const);
+        assert!(!stats.has_conf);
+        assert_eq!(stats.streak, 0);
+    }
 }

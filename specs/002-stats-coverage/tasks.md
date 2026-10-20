@@ -19,35 +19,35 @@ adds tests and re-measures.
 
 ## Phase 2: Pure Functions
 
-- [ ] T002 [P] [US1] Add unit tests for the percentile exact rank
+- [x] T002 [P] [US1] Add unit tests for the percentile exact rank
       and the aggregation skips (zero minutes, unparsable dates)
       in the test module of `src/stats.rs`
-- [ ] T003 [P] [US1] Add unit tests for the week count ordering,
+- [x] T003 [P] [US1] Add unit tests for the week count ordering,
       the empty week count result, and the streak fallbacks in the
       test module of `src/stats.rs`
 
 ## Phase 3: Chart Builders
 
-- [ ] T004 [US1] Add unit tests for the distribution, week,
+- [x] T004 [US1] Add unit tests for the distribution, week,
       confidence, and consistency charts on empty, single, and
       zero inputs in the test module of `src/stats.rs`
 
 ## Phase 4: App Aggregations
 
-- [ ] T005 [US1] Add unit tests with an in-memory fixture for the
+- [x] T005 [US1] Add unit tests with an in-memory fixture for the
       piece totals, day totals, audition time rows, coverage rows,
       and diary stats in the test module of `src/stats.rs`
-- [ ] T006 [US1] Re-measure: the JSON report of `cargo llvm-cov
-  --locked` shows `src/stats.rs` at or above 97.0% of lines;
+- [x] T006 [US1] Re-measure: the JSON report of `cargo llvm-cov
+--locked` shows `src/stats.rs` at or above 97.0% of lines;
       record each line that stays uncovered in plan.md
 
 ## Phase 5: Verification
 
-- [ ] T007 [US1] Run the full local verification: `cargo test
-  --locked`, `cargo llvm-cov --locked --fail-under-lines 90`,
+- [x] T007 [US1] Run the full local verification: `cargo test
+--locked`, `cargo llvm-cov --locked --fail-under-lines 90`,
       `cargo fmt --check`, `cargo clippy --all-targets -- -D
-  warnings`
-- [ ] T008 [US1] Confirm the diff holds no non-test change
+warnings`
+- [x] T008 [US1] Confirm the diff holds no non-test change
 
 ## Phase 6: Pull Request and Convergence
 
