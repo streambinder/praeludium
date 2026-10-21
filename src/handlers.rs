@@ -1041,8 +1041,8 @@ impl App {
 /// and work.
 pub fn sort_skipped(entries: &mut [SkippedEntry]) {
     entries.sort_by(|a, b| {
-        b.auto
-            .cmp(&a.auto)
+        a.auto
+            .cmp(&b.auto)
             .then_with(|| a.p.composer.cmp(&b.p.composer))
             .then_with(|| a.p.work.cmp(&b.p.work))
     });
@@ -4590,8 +4590,10 @@ mod tests {
         assert_eq!(data.extra_done[0].logged, 45);
         app.today_skipped(&mut data, &by_id, "2026-10-20").unwrap();
         assert_eq!(data.skipped.len(), 3);
-        assert!(data.skipped[0].auto);
-        assert_eq!(data.skipped[0].p.id, 2);
+        assert!(!data.skipped[0].auto);
+        assert!(!data.skipped[1].auto);
+        assert!(data.skipped[2].auto);
+        assert_eq!(data.skipped[2].p.id, 2);
         app.stamp_today_levels(&mut data).unwrap();
     }
 
@@ -4637,7 +4639,7 @@ mod tests {
             },
         ];
         sort_skipped(&mut entries);
-        assert!(entries[0].auto);
-        assert!(!entries[1].auto);
+        assert!(!entries[0].auto);
+        assert!(entries[1].auto);
     }
 }
