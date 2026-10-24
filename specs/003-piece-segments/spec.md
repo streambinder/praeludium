@@ -37,6 +37,14 @@ audition requires. No segment specified means the whole piece."
 - A link references zero or more segments of the linked piece. Zero
   segments means the whole piece. The reading matches every link
   that exists today.
+- A session references one piece, always. A session may reference
+  one segment of that piece. No segment reference means the session
+  covers the whole piece.
+- Credit flows down and up, never sideways. A session on the whole
+  piece counts toward every segment scope of the piece. A session
+  on a segment counts toward the whole-piece scope and toward the
+  scopes whose set includes that segment. A session on a segment
+  never counts toward a different segment.
 
 ## Hypothesis Challenge
 
@@ -195,11 +203,11 @@ same range, from the single definition.
   carries the segment set of its link. Items with equal piece and
   equal segment set merge into one item that names every
   destination audition.
-- **FR-7**: Readiness and scoring are computed per link scope. A
-  session on the whole piece counts toward every scope of the
-  piece. A session on a segment counts toward the scopes whose
-  segment set includes that segment, and toward the whole-piece
-  scope.
+- **FR-7**: Readiness and scoring are computed per link scope. The
+  heat map of a link counts the sessions on the whole piece and
+  the sessions on the segments in the set of the link. Sessions on
+  other segments of the piece do not count. A link without
+  segments counts every session of the piece.
 - **FR-8**: The free-text excerpt note on a link stays as display
   text. Segments add structure; the note keeps wording that no
   range expresses.
@@ -248,12 +256,9 @@ backup first:
 
 ## Assumptions and Open Points
 
-- **A-1 (for ratification)**: FR-7 states the readiness scope
-  rule. The rule is a proposal until the owner ratifies this
-  specification.
-- **A-2 (for ratification)**: FR-5 keeps the whole piece as the
-  default scope of a session. Segment-level logging is optional
-  and never required by the daily flow.
+- **A-1 (decided 2026-10-24)**: The scope credit rule of FR-7 and
+  the whole-piece default of FR-5 are owner decisions, recorded
+  in the clarifications of this specification.
 - **A-3**: The Cagliari cadenza stays unresolved in the data
   until the foundation clarifies the program. The model does not
   depend on the answer.
