@@ -163,27 +163,39 @@ does not. Only the first link gains from the session.
    runs for a link without that segment, **Then** the session
    does not raise that link.
 
-### User Story 4 - Segments are defined once and reused (Priority: P2)
+### User Story 4 - Segments are born at link time and reused (Priority: P2)
 
-The owner defines a segment on the piece, with or without an
-alias. Every link to that piece can reference the segment. A
+Segments have no management surface of their own (amendment of
+the owner, 2026-10-26). A segment comes into being inside the
+flow that links a piece to an audition: the link form offers
+the whole piece as the default, the segments the piece already
+carries as a choice, and an inline definition of a new segment.
+Every later link to that piece can reference the segment. A
 segment that only one audition needs can stay unnamed; its
-endpoints define it.
+endpoints define it. A segment that no link references ceases
+to exist: the application removes it when the link that last
+referenced it changes.
 
 **Why this priority**: Reuse keeps one definition of a part that
 several programs share, so the definitions cannot drift apart.
+Link-time definition keeps one surface for the whole act of
+stating what an audition asks.
 
-**Independent Test**: Define one unnamed ranged segment on a
-piece and reference it from two links. Both programs show the
-same range, from the single definition.
+**Independent Test**: Link a piece to two auditions, defining
+one unnamed ranged segment inline on the first link and
+selecting it on the second. Both programs show the same range,
+from the single definition. Unlink the segment from both: the
+segment is gone.
 
 **Acceptance Scenarios**:
 
-1. **Given** a piece, **When** the owner adds a segment with an
-   alias, **Then** the alias is unique within the piece.
-2. **Given** a segment referenced by a link, **When** the owner
-   tries to delete the segment, **Then** the application refuses
-   or unlinks first; no link dangles.
+1. **Given** a piece, **When** the owner defines a segment with
+   an alias at link time, **Then** the alias is unique within
+   the piece, and a repeated identical definition reuses the
+   existing segment.
+2. **Given** a segment referenced by one link, **When** that
+   link stops referencing it and no other link does, **Then**
+   the segment no longer exists and no link dangles.
 
 ## Functional Requirements
 
@@ -194,6 +206,10 @@ same range, from the single definition.
   signed offset in bars that defaults to zero.
 - **FR-3**: A segment may carry an alias. An alias is unique among
   the segments of its piece.
+- **FR-11**: Segments are created and selected only inside the
+  link flow between a piece and an audition. A segment that no
+  link references is removed automatically; sessions that named
+  it fall back to the whole piece.
 - **FR-4**: A link between a piece and an audition references zero
   or more segments of that piece. Zero references mean the whole
   piece.

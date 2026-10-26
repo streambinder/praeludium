@@ -18,28 +18,6 @@
 </div>
 </div>
 
-<section class="panel reveal">
-<div class="section-head"><h2>{{ t("segment.title") }}</h2><span class="meta">{{ Segments | length }}</span></div>
-{% if SegNotice %}<p class="empty-note">{{ SegNotice }}</p>{% endif %}
-{% for seg in Segments %}
-<div class="row btns"><span><strong>{{ seg.Label }}</strong></span><form method="post" action="/pieces/{{ Piece.ID }}/segments/{{ seg.ID }}/delete" class="inline"><button class="secondary" type="submit">{{ t("common.remove") }}</button></form></div>
-{% else %}<p class="empty">{{ t("segment.none") }}</p>{% endfor %}
-<form method="post" action="/pieces/{{ Piece.ID }}/segments" class="stack">
-<label>{{ t("segment.alias") }} <input type="text" name="alias" placeholder="{{ t("segment.alias_ph") }}"></label>
-<div class="row">
-<label>{{ t("segment.from") }} <select name="start_kind"><option value="start">{{ t("segment.start") }}</option><option value="bar">{{ t("segment.bar") }}</option><option value="mark">{{ t("segment.mark") }}</option><option value="end">{{ t("segment.end") }}</option></select></label>
-<label><input type="text" name="start_value" placeholder="{{ t("segment.value_ph") }}"></label>
-<label>{{ t("segment.offset") }} <input type="number" name="start_offset" value="0"></label>
-</div>
-<div class="row">
-<label>{{ t("segment.to") }} <select name="end_kind"><option value="end">{{ t("segment.end") }}</option><option value="bar">{{ t("segment.bar") }}</option><option value="mark">{{ t("segment.mark") }}</option><option value="start">{{ t("segment.start") }}</option></select></label>
-<label><input type="text" name="end_value" placeholder="{{ t("segment.value_ph") }}"></label>
-<label>{{ t("segment.offset") }} <input type="number" name="end_offset" value="0"></label>
-</div>
-<button type="submit">{{ t("common.add") }}</button>
-</form>
-</section>
-
 {% if Spark.Points %}
 <section class="panel reveal">
 <div class="section-head"><h2>{{ t("piece.security_history") }}</h2></div>

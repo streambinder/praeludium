@@ -1,0 +1,13 @@
+<details class="segnew"><summary>{{ t("segment.new") }}</summary>
+<label>{{ t("segment.alias") }} <input type="text" name="segnew-alias-{{ c.ID }}" placeholder="{{ t("segment.alias_ph") }}"></label>
+<div class="row">
+<label>{{ t("segment.from") }} <select name="segnew-start-kind-{{ c.ID }}"><option value="start">{{ t("segment.start") }}</option><option value="bar">{{ t("segment.bar") }}</option><option value="mark">{{ t("segment.mark") }}</option><option value="end">{{ t("segment.end") }}</option></select></label>
+<label><input type="text" name="segnew-start-value-{{ c.ID }}" placeholder="{{ t("segment.value_ph") }}"></label>
+<label>{{ t("segment.offset") }} <input type="number" name="segnew-start-offset-{{ c.ID }}" value="0"></label>
+</div>
+<div class="row">
+<label>{{ t("segment.to") }} <select name="segnew-end-kind-{{ c.ID }}"><option value="end">{{ t("segment.end") }}</option><option value="bar">{{ t("segment.bar") }}</option><option value="mark">{{ t("segment.mark") }}</option><option value="start">{{ t("segment.start") }}</option></select></label>
+<label><input type="text" name="segnew-end-value-{{ c.ID }}" placeholder="{{ t("segment.value_ph") }}"></label>
+<label>{{ t("segment.offset") }} <input type="number" name="segnew-end-offset-{{ c.ID }}" value="0"></label>
+</div>
+</details>
