@@ -1,7 +1,7 @@
 # ---- build ----
 FROM rust:1-alpine3.24 AS build
 WORKDIR /src
-RUN apk add --no-cache musl-dev=1.2.6-r2
+RUN apk add --no-cache musl-dev=1.2.6-r3
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY templates ./templates
