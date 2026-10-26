@@ -102,10 +102,10 @@ holds.
 
 ## Phase 5: Verification and converge
 
-- [ ] T016 Run the full local gate: format, lint, unit and
+- [x] T016 Run the full local gate: format, lint, unit and
       integration tests, coverage at or above 90 percent of the
       crate with the new modules measured
-- [ ] T017 Regression pass on unsegmented fixtures for SC-3:
+- [x] T017 Regression pass on unsegmented fixtures for SC-3:
       pieces, auditions, diary, readiness and plan pages render
       as before the feature
 - [ ] T018 Update the specification status and this task list,

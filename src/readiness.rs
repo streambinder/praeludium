@@ -196,10 +196,8 @@ impl App {
                     "SELECT segment_id FROM sessions
 					WHERE piece_id = ? AND minutes > 0 AND date >= ?",
                 )?;
-                let rows = stmt
-                    .query_map(params![p.id, since], |row| row.get(0))?
-                    .collect::<Result<Vec<Option<i64>>>>()?;
-                rows
+                stmt.query_map(params![p.id, since], |row| row.get(0))?
+                    .collect::<Result<Vec<Option<i64>>>>()?
             };
             if segs.iter().any(|s| crate::segments::counts(*s, &scope)) {
                 touched += 1;
@@ -224,12 +222,10 @@ impl App {
 				JOIN piece_audition pa ON pa.piece_id = s.piece_id
 				WHERE pa.audition_id = ? AND s.minutes > 0 AND s.confidence > 0 ORDER BY s.date",
             )?;
-            let rows = stmt
-                .query_map(params![audition_id], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
-                })?
-                .collect::<Result<Vec<_>>>()?;
-            rows
+            stmt.query_map(params![audition_id], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
+            .collect::<Result<Vec<_>>>()?
         };
         let mut cache = std::collections::HashMap::new();
         let mut rows = Vec::new();
@@ -269,12 +265,10 @@ impl App {
 				JOIN piece_audition pa ON pa.piece_id = s.piece_id
 				WHERE pa.audition_id = ? AND s.minutes > 0",
             )?;
-            let rows = stmt
-                .query_map(params![audition_id], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
-                })?
-                .collect::<Result<Vec<_>>>()?;
-            rows
+            stmt.query_map(params![audition_id], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
+            .collect::<Result<Vec<_>>>()?
         };
         let mut cache = std::collections::HashMap::new();
         let (mut all, mut week) = (0i64, 0i64);
