@@ -58,7 +58,7 @@
 <span class="prep-pin pin-corner" tabindex="0" aria-label="{{ t("prep.label", pct(p.Prep)) }}"><span class="prep-dot lv{{ p.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(p.Prep)) }}</span></span>
 <div class="card-head"><strong><a class="card-link" href="/diary/piece/{{ p.ID }}">{{ p.Composer }} — {{ p.Work }}</a></strong></div>
 <div class="meta movement-row"><span class="badge kind">{{ kindLabel(p.Kind) }}</span>{% if p.Movement %}<span>{{ p.Movement }}</span>{% endif %}{% for c in p.Auditions %}{% if c.ID == Audition.ID and c.RoundName %}<span class="badge">{{ c.RoundName }}</span>{% endif %}{% endfor %}</div>
-{% for c in p.Auditions %}{% if c.ID == Audition.ID and c.Excerpt %}<div class="meta">{{ c.Excerpt }}</div>{% endif %}{% endfor %}
+{% for c in p.Auditions %}{% if c.ID == Audition.ID and c.Excerpt %}<div class="meta">{{ c.Excerpt }}</div>{% endif %}{% if c.ID == Audition.ID and c.SegmentLabels %}<div class="meta">{{ t("segment.parts") }}: {{ c.SegmentLabels | join(", ") }}</div>{% endif %}{% endfor %}
 </article>
 {% else %}<p class="empty">{{ t("detail.no_pieces") }}</p>{% endfor %}
 </div>

@@ -39,18 +39,18 @@ rule exists in one place. No surface changes yet.
 
 ## Phase 2: User Story 4 and User Story 1 — define and link
 
-- [ ] T005 [US4] Piece detail: segments section and add form in
+- [x] T005 [US4] Piece detail: segments section and add form in
       `templates/piece_detail.html`, handlers in
       `src/handlers.rs`; done when an owner can define an aliased
       and an unnamed segment on a piece and see both labels
-- [ ] T006 [US4] Segment deletion in `src/handlers.rs`: refused
+- [x] T006 [US4] Segment deletion in `src/handlers.rs`: refused
       with a message while any link references the segment;
       allowed otherwise; integration test covers both branches
-- [ ] T007 [US1] Link editor: per linked piece with segments,
+- [x] T007 [US1] Link editor: per linked piece with segments,
       one checkbox per segment in
       `templates/audition_detail.html`; saving rewrites the
       `link_segments` rows of the link in `src/handlers.rs`
-- [ ] T008 [US1] Program rendering: the audition page lists the
+- [x] T008 [US1] Program rendering: the audition page lists the
       segment labels of each link beside the piece; a link
       without segments renders exactly as today (SC-3 anchor)
 

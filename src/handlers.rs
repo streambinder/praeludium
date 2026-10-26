@@ -1480,6 +1480,10 @@ pub struct PieceFormData {
     pub rounds: HashMap<String, Vec<crate::db::Round>>,
     #[serde(rename = "SelRound")]
     pub sel_round: HashMap<String, i64>,
+    #[serde(rename = "Segments")]
+    pub segments: Vec<crate::db::Segment>,
+    #[serde(rename = "SelSegments")]
+    pub sel_segments: HashMap<String, Vec<i64>>,
 }
 
 pub async fn handle_edit_piece(
@@ -1517,6 +1521,21 @@ pub async fn handle_edit_piece(
             Err(e) => return err500(&e),
         }
     }
+    let segments = match app.segments_for_piece(p.id) {
+        Ok(v) => v,
+        Err(e) => return err500(&e),
+    };
+    let mut sel_segments: HashMap<String, Vec<i64>> = HashMap::new();
+    for c in &p.auditions {
+        match app.link_segment_ids(p.id, c.id) {
+            Ok(ids) => {
+                if !ids.is_empty() {
+                    sel_segments.insert(c.id.to_string(), ids);
+                }
+            }
+            Err(e) => return err500(&e),
+        }
+    }
     render(
         &headers,
         "piece_form.html",
@@ -1529,6 +1548,8 @@ pub async fn handle_edit_piece(
             excerpt: excerpts,
             rounds,
             sel_round,
+            segments,
+            sel_segments,
         },
     )
 }
@@ -1626,6 +1647,15 @@ pub async fn handle_update_piece(
             ) {
                 return err500(&e);
             }
+        }
+    }
+    if let Err(e) = app.clear_piece_link_segments(id) {
+        return err500(&e);
+    }
+    for cid in &audition_ids {
+        let seg_ids = form.ids(&format!("segment-{cid}"));
+        if let Err(e) = app.set_link_segments(id, *cid, &seg_ids) {
+            return err500(&e);
         }
     }
     eprintln!("event piece updated id={id}");
@@ -2775,6 +2805,10 @@ pub struct PieceDetailData {
     pub has_tempo: bool,
     #[serde(rename = "TempoLatest")]
     pub tempo_latest: i64,
+    #[serde(rename = "Segments")]
+    pub segments: Vec<crate::db::Segment>,
+    #[serde(rename = "SegNotice")]
+    pub seg_notice: String,
 }
 
 pub async fn handle_piece_detail(
@@ -2852,7 +2886,16 @@ pub async fn handle_piece_detail(
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
+    let segments = match app.segments_for_piece(p.id) {
+        Ok(v) => v,
+        Err(e) => return err500(&e),
+    };
     let form = FormData::query_only(uri.query().unwrap_or(""));
+    let seg_notice = match form.get("segmsg") {
+        "linked" => tr(&req_lang(&headers), "segment.linked_warn", &[]),
+        "alias" => tr(&req_lang(&headers), "segment.alias_dup", &[]),
+        _ => String::new(),
+    };
     let mut recorder_date = form.get("date").to_string();
     if chrono::NaiveDate::parse_from_str(&recorder_date, "%Y-%m-%d").is_err() {
         recorder_date = today.clone();
@@ -2885,8 +2928,87 @@ pub async fn handle_piece_detail(
             tempo,
             has_tempo: !tps.is_empty(),
             tempo_latest,
+            segments,
+            seg_notice,
         },
     )
+}
+
+/// Add a segment to a piece from the piece page form. An anchor
+/// kind outside the known set falls back to the default anchor
+/// of its side. A duplicate alias returns to the piece page
+/// with a notice instead of an error page.
+pub async fn handle_add_segment(
+    State(app): State<Shared>,
+    Path(id): Path<String>,
+    req: axum::extract::Request,
+) -> Response {
+    let p = match app.piece_or_404(&id) {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    let (_headers, _q, form) = match form_of(req).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    let kind_of = |name: &str, default: &str| -> String {
+        match form.get(name) {
+            "bar" => "bar".to_string(),
+            "mark" => "mark".to_string(),
+            "start" => "start".to_string(),
+            "end" => "end".to_string(),
+            _ => default.to_string(),
+        }
+    };
+    let seg = crate::db::Segment {
+        piece_id: p.id,
+        alias: form.get("alias").trim().to_string(),
+        start_kind: kind_of("start_kind", "start"),
+        start_value: form.get("start_value").trim().to_string(),
+        start_offset: form.int("start_offset", 0),
+        end_kind: kind_of("end_kind", "end"),
+        end_value: form.get("end_value").trim().to_string(),
+        end_offset: form.int("end_offset", 0),
+        ..Default::default()
+    };
+    match app.add_segment(&seg) {
+        Ok(new_id) => {
+            eprintln!("event segment added piece={} id={new_id}", p.id);
+            see_other(&format!("/diary/piece/{}", p.id))
+        }
+        Err(_) => see_other(&format!("/diary/piece/{}?segmsg=alias", p.id)),
+    }
+}
+
+/// Delete one segment of a piece. A segment that a link still
+/// references is kept, and the owner lands back on the piece
+/// page with a notice.
+pub async fn handle_delete_segment(
+    State(app): State<Shared>,
+    Path((id, segment_id)): Path<(String, String)>,
+) -> Response {
+    let p = match app.piece_or_404(&id) {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    let Some(seg_id) = path_id(&segment_id) else {
+        return not_found();
+    };
+    let owns = match app.segments_for_piece(p.id) {
+        Ok(v) => v.iter().any(|s| s.id == seg_id),
+        Err(e) => return err500(&e),
+    };
+    if !owns {
+        return not_found();
+    }
+    match app.delete_segment(seg_id) {
+        Ok(true) => {
+            eprintln!("event segment deleted piece={} id={seg_id}", p.id);
+            see_other(&format!("/diary/piece/{}", p.id))
+        }
+        Ok(false) => see_other(&format!("/diary/piece/{}?segmsg=linked", p.id)),
+        Err(e) => err500(&e),
+    }
 }
 
 // ---------- settings ----------
@@ -3825,6 +3947,11 @@ pub fn router(app: Shared) -> axum::Router {
         .route("/pieces/{id}/archive", post(handle_archive_piece))
         .route("/pieces/{id}/restore", post(handle_restore_piece))
         .route("/pieces/{id}/recordings", post(handle_upload_recording))
+        .route("/pieces/{id}/segments", post(handle_add_segment))
+        .route(
+            "/pieces/{id}/segments/{segmentID}/delete",
+            post(handle_delete_segment),
+        )
         .route(
             "/auditions",
             get(handle_auditions).post(handle_add_audition),
