@@ -659,11 +659,11 @@ impl App {
 
     /// Count the links that reference a segment.
     pub fn segment_link_count(&self, segment_id: i64) -> Result<i64> {
-        Ok(self.conn().query_row(
+        self.conn().query_row(
             "SELECT COUNT(*) FROM link_segments WHERE segment_id=?",
             params![segment_id],
             |row| row.get(0),
-        )?)
+        )
     }
 
     /// Delete a segment. A segment that any link references is
