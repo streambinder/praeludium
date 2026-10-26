@@ -32,7 +32,7 @@ the existing stack (constitution, library selection).
 batch; the new session column rides the `add_column` helper. The
 migration is idempotent and touches no existing row.
 
-**Testing**: Unit tests co-located with the modules they cover;
+**Testing**: Unit tests beside the modules they cover;
 integration tests in `tests/` for migration and link flows. The
 crate coverage gate of 90 percent must hold (spec SC-4).
 
@@ -58,7 +58,7 @@ readiness and prep map computations.
 ## Constitution Check
 
 - One repository, one deployable unit: unchanged.
-- Tests co-located, integration separate, 90 percent gate:
+- Tests beside the code, integration separate, 90 percent gate:
   planned in every phase.
 - Library selection: no new dependency.
 - Data precondition FR-9: executed on production on 2026-10-24
