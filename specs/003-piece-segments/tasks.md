@@ -16,20 +16,20 @@ shape of features 001 and 002.
 
 ## Phase 1: Foundation — storage and the one scope definition
 
-- [ ] T001 Add the migration to `src/db.rs`: tables `segments`
+- [x] T001 Add the migration to `src/db.rs`: tables `segments`
       and `link_segments`, the partial unique index on
       `(piece_id, alias)`, and `sessions.segment_id` through
       `add_column`; done when the migration test proves a fresh
       database and an upgraded database reach the same schema
       and the migration runs twice without error
-- [ ] T002 Add the `Segment` struct and the segment queries to
+- [x] T002 Add the `Segment` struct and the segment queries to
       `src/db.rs`: list by piece, insert, delete, and the
       referenced-by-link count that guards deletion
-- [ ] T003 [P] Create `src/segments.rs` with endpoint rendering
+- [x] T003 [P] Create `src/segments.rs` with endpoint rendering
       (`start`, `end`, `bar`, `mark`, offsets) and the segment
       label function; unit tests cover every anchor kind, a
       positive and a negative offset, and the alias precedence
-- [ ] T004 [P] Add the scope helper to `src/segments.rs`:
+- [x] T004 [P] Add the scope helper to `src/segments.rs`:
       `counts(session_segment, scope)` for the whole-piece scope
       and for a segment set; unit tests cover the three flows of
       the rule (down, up, never sideways)

@@ -10,4 +10,5 @@ pub mod readiness;
 pub mod recordings;
 pub mod render;
 pub mod score;
+pub mod segments;
 pub mod stats;

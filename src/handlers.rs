@@ -2515,7 +2515,7 @@ pub async fn handle_diary_day(
         let db = app.db.lock().unwrap_or_else(|p| p.into_inner());
         let prepared = db.prepare(
             "SELECT s.id, s.date, s.piece_id, s.minutes, s.confidence, s.note, s.bpm,
-			p.id, p.composer, p.work, p.movement
+			p.id, p.composer, p.work, p.movement, s.segment_id
 			FROM sessions s JOIN pieces p ON p.id = s.piece_id
 			WHERE s.date = ? ORDER BY p.composer, p.work, s.id",
         );
@@ -2531,6 +2531,7 @@ pub async fn handle_diary_day(
                             confidence: row.get(4)?,
                             note: row.get(5)?,
                             bpm: row.get(6)?,
+                            segment_id: row.get(11)?,
                         },
                         composer: row.get(8)?,
                         work: row.get(9)?,
@@ -2789,7 +2790,7 @@ pub async fn handle_piece_detail(
     let sessions = {
         let db = app.db.lock().unwrap_or_else(|p| p.into_inner());
         let prepared = db.prepare(
-            "SELECT id, date, piece_id, minutes, confidence, note, bpm FROM sessions
+            "SELECT id, date, piece_id, minutes, confidence, note, bpm, segment_id FROM sessions
 			WHERE piece_id=? ORDER BY date DESC, id DESC",
         );
         match prepared {
@@ -2803,6 +2804,7 @@ pub async fn handle_piece_detail(
                         confidence: row.get(4)?,
                         note: row.get(5)?,
                         bpm: row.get(6)?,
+                        segment_id: row.get(7)?,
                     })
                 })
                 .and_then(|rows| rows.collect::<DbResult<Vec<_>>>())
