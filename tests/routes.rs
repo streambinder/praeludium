@@ -960,3 +960,125 @@ async fn recording_delete_flow() {
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[tokio::test]
+async fn segment_define_link_render_and_delete_guard() {
+    let (r, app) = test_app();
+    r.clone()
+        .oneshot(form_req("/auditions", "name=Roma&date=2026-12-06&weight=4"))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Haydn&work=Concerto+in+Re&kind=solo&difficulty=3&audition=1",
+        ))
+        .await
+        .unwrap();
+
+    // Define an aliased segment and an unnamed bar range.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/pieces/1/segments",
+            "alias=Cadenza&start_kind=bar&start_value=100&start_offset=0&end_kind=bar&end_value=130&end_offset=0",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    r.clone()
+        .oneshot(form_req(
+            "/pieces/1/segments",
+            "alias=&start_kind=start&start_value=&start_offset=0&end_kind=bar&end_value=99&end_offset=0",
+        ))
+        .await
+        .unwrap();
+    let segs = app.segments_for_piece(1).unwrap();
+    assert_eq!(segs.len(), 2);
+    assert_eq!(segs[0].label, "Cadenza");
+    assert_eq!(segs[1].label, "inizio\u{2013}b. 99");
+    let cadenza_id = segs[0].id;
+
+    // A duplicate alias bounces back with the alias notice.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/pieces/1/segments",
+            "alias=Cadenza&start_kind=start&end_kind=end",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert!(
+        resp.headers()
+            .get(header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("segmsg=alias")
+    );
+
+    // The piece page lists the segment.
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/diary/piece/1"))
+        .await
+        .unwrap();
+    assert!(body_string(resp).await.contains("Cadenza"));
+
+    // Link only the Cadenza to Roma through the piece form.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/pieces/1/edit",
+            &format!("composer=Haydn&work=Concerto+in+Re&kind=solo&difficulty=3&audition=1&segment-1={cadenza_id}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert_eq!(app.link_segment_ids(1, 1).unwrap(), vec![cadenza_id]);
+
+    // The audition page names the required part.
+    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
+    assert!(body_string(resp).await.contains("Cadenza"));
+
+    // Deletion is refused while the link references the segment.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            &format!("/pieces/1/segments/{cadenza_id}/delete"),
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert!(
+        resp.headers()
+            .get(header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("segmsg=linked")
+    );
+    assert_eq!(app.segments_for_piece(1).unwrap().len(), 2);
+
+    // Unlink through the form, then deletion succeeds.
+    r.clone()
+        .oneshot(form_req(
+            "/pieces/1/edit",
+            "composer=Haydn&work=Concerto+in+Re&kind=solo&difficulty=3&audition=1",
+        ))
+        .await
+        .unwrap();
+    assert!(app.link_segment_ids(1, 1).unwrap().is_empty());
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            &format!("/pieces/1/segments/{cadenza_id}/delete"),
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert_eq!(app.segments_for_piece(1).unwrap().len(), 1);
+}

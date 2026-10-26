@@ -5,7 +5,7 @@
 <h1><span class="prep-pin pin-title" tabindex="0" aria-label="{{ t("prep.label", pct(Piece.Prep)) }}"><span class="prep-dot lv{{ Piece.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(Piece.Prep)) }}</span></span>{{ Piece.Composer }} — {{ Piece.Work }}{% if Piece.Archived %} <span class="badge muted">{{ t("pieces.archived_badge") }}</span>{% endif %}</h1>
 {% if Piece.Movement %}<p class="piece-subtitle">{{ Piece.Movement }}</p>{% endif %}
 <div class="concorso-rows">
-{% for c in Piece.Auditions %}<div class="concorso-row"><span class="chip{% if c.Archived %} muted{% endif %}">{{ c.Name }}{% if c.RoundName %}<span class="chip-round">· {{ c.RoundName }}</span>{% endif %}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% if c.Excerpt %}<span class="meta">{{ c.Excerpt }}</span>{% endif %}</div>
+{% for c in Piece.Auditions %}<div class="concorso-row"><span class="chip{% if c.Archived %} muted{% endif %}">{{ c.Name }}{% if c.RoundName %}<span class="chip-round">· {{ c.RoundName }}</span>{% endif %}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% if c.Excerpt %}<span class="meta">{{ c.Excerpt }}</span>{% endif %}{% if c.SegmentLabels %}<span class="meta">{{ t("segment.parts") }}: {{ c.SegmentLabels | join(", ") }}</span>{% endif %}</div>
 {% else %}<p class="meta">{{ t("piece.none_linked") }}</p>{% endfor %}
 </div>
 <div class="row btns">
@@ -17,6 +17,28 @@
 {% endif %}
 </div>
 </div>
+
+<section class="panel reveal">
+<div class="section-head"><h2>{{ t("segment.title") }}</h2><span class="meta">{{ Segments | length }}</span></div>
+{% if SegNotice %}<p class="empty-note">{{ SegNotice }}</p>{% endif %}
+{% for seg in Segments %}
+<div class="row btns"><span><strong>{{ seg.Label }}</strong></span><form method="post" action="/pieces/{{ Piece.ID }}/segments/{{ seg.ID }}/delete" class="inline"><button class="secondary" type="submit">{{ t("common.remove") }}</button></form></div>
+{% else %}<p class="empty">{{ t("segment.none") }}</p>{% endfor %}
+<form method="post" action="/pieces/{{ Piece.ID }}/segments" class="stack">
+<label>{{ t("segment.alias") }} <input type="text" name="alias" placeholder="{{ t("segment.alias_ph") }}"></label>
+<div class="row">
+<label>{{ t("segment.from") }} <select name="start_kind"><option value="start">{{ t("segment.start") }}</option><option value="bar">{{ t("segment.bar") }}</option><option value="mark">{{ t("segment.mark") }}</option><option value="end">{{ t("segment.end") }}</option></select></label>
+<label><input type="text" name="start_value" placeholder="{{ t("segment.value_ph") }}"></label>
+<label>{{ t("segment.offset") }} <input type="number" name="start_offset" value="0"></label>
+</div>
+<div class="row">
+<label>{{ t("segment.to") }} <select name="end_kind"><option value="end">{{ t("segment.end") }}</option><option value="bar">{{ t("segment.bar") }}</option><option value="mark">{{ t("segment.mark") }}</option><option value="start">{{ t("segment.start") }}</option></select></label>
+<label><input type="text" name="end_value" placeholder="{{ t("segment.value_ph") }}"></label>
+<label>{{ t("segment.offset") }} <input type="number" name="end_offset" value="0"></label>
+</div>
+<button type="submit">{{ t("common.add") }}</button>
+</form>
+</section>
 
 {% if Spark.Points %}
 <section class="panel reveal">

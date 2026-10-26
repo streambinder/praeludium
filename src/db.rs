@@ -58,6 +58,10 @@ pub struct Audition {
     /// Per-link round name, set only when read through piece_audition.
     #[serde(rename = "RoundName")]
     pub round_name: String,
+    /// Per-link segment labels, set only when read through
+    /// piece_audition; empty when the link asks the whole piece.
+    #[serde(rename = "SegmentLabels")]
+    pub segment_labels: Vec<String>,
     /// Mean preparation level 0..4 of its pieces, stamped on demand.
     #[serde(rename = "Level")]
     pub level: i64,
@@ -154,6 +158,9 @@ pub struct Segment {
     pub end_value: String,
     #[serde(rename = "EndOffset")]
     pub end_offset: i64,
+    /// Display label (alias or rendered range), stamped on read.
+    #[serde(rename = "Label")]
+    pub label: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
@@ -513,7 +520,7 @@ impl App {
 			LEFT JOIN audition_rounds rd ON rd.id = pc.round_id
 			WHERE pc.piece_id=? ORDER BY c.audition_date",
         )?;
-        let rows = stmt
+        let mut rows = stmt
             .query_map(params![piece_id], |row| {
                 Ok(Audition {
                     id: row.get(0)?,
@@ -528,6 +535,19 @@ impl App {
                 })
             })?
             .collect::<Result<Vec<_>>>()?;
+        drop(stmt);
+        drop(db);
+        if !rows.is_empty() {
+            let by_id: std::collections::HashMap<i64, String> = self
+                .segments_for_piece(piece_id)?
+                .into_iter()
+                .map(|s| (s.id, s.label))
+                .collect();
+            for c in &mut rows {
+                let ids = self.link_segment_ids(piece_id, c.id)?;
+                c.segment_labels = ids.iter().filter_map(|id| by_id.get(id).cloned()).collect();
+            }
+        }
         Ok(rows)
     }
 
@@ -585,7 +605,8 @@ impl App {
         Ok(())
     }
 
-    /// Return the segments of a piece, oldest first.
+    /// Return the segments of a piece, oldest first, each with
+    /// its display label stamped.
     pub fn segments_for_piece(&self, piece_id: i64) -> Result<Vec<Segment>> {
         let db = self.conn();
         let mut stmt = db.prepare(
@@ -593,7 +614,7 @@ impl App {
 			end_kind, end_value, end_offset FROM segments
 			WHERE piece_id=? ORDER BY id",
         )?;
-        let rows = stmt
+        let mut rows = stmt
             .query_map(params![piece_id], |row| {
                 Ok(Segment {
                     id: row.get(0)?,
@@ -605,9 +626,13 @@ impl App {
                     end_kind: row.get(6)?,
                     end_value: row.get(7)?,
                     end_offset: row.get(8)?,
+                    label: String::new(),
                 })
             })?
             .collect::<Result<Vec<_>>>()?;
+        for seg in &mut rows {
+            seg.label = crate::segments::segment_label(seg);
+        }
         Ok(rows)
     }
 
@@ -664,6 +689,17 @@ impl App {
             .query_map(params![piece_id, audition_id], |row| row.get(0))?
             .collect::<Result<Vec<i64>>>()?;
         Ok(rows)
+    }
+
+    /// Remove every segment reference of a piece, across all its
+    /// links. The piece form rebuild calls this before it writes
+    /// the new sets.
+    pub fn clear_piece_link_segments(&self, piece_id: i64) -> Result<()> {
+        self.conn().execute(
+            "DELETE FROM link_segments WHERE piece_id=?",
+            params![piece_id],
+        )?;
+        Ok(())
     }
 
     /// Replace the segment set of a piece-audition link. An id
