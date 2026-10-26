@@ -58,6 +58,7 @@
 <label>{{ t("field.security") }} <input type="range" name="confidence" min="1" max="5" step="1" value="3" oninput="this.nextElementSibling.textContent=this.value+'/5'"> <output>3/5</output></label>
 <label>{{ t("field.metronome") }} <input type="number" name="bpm" min="1" max="400" placeholder="{{ t("field.optional") }}"></label>
 </div>
+<label id="segment-wrap" hidden>{{ t("segment.field") }} <select name="segment_id" id="segment-select"><option value="">{{ t("segment.whole") }}</option></select></label>
 <div class="row btns">
 <button type="submit">{{ t("today.log") }}</button>
 </div>
@@ -67,6 +68,31 @@
 
 <script>
 var L = { neverTouched: {{ t("js.never_touched") | tojson | safe }}, saved: {{ t("js.saved") | tojson | safe }}, errorRetry: {{ t("js.error_retry") | tojson | safe }}, progressFmt: {{ t("today.x_of_y") | tojson | safe }}, start: {{ t("timer.start") | tojson | safe }}, pause: {{ t("timer.pause") | tojson | safe }}, resume: {{ t("timer.resume") | tojson | safe }}, skipConfirm: {{ t("today.skip_confirm") | tojson | safe }} };
+var SEGMENTS_BY_PIECE = {{ SegmentsJSON | safe }};
+var SEGMENT_WHOLE = {{ t("segment.whole") | tojson | safe }};
+(function () {
+  var wrap = document.getElementById('segment-wrap');
+  var sel = document.getElementById('segment-select');
+  var piece = document.querySelector('form.checkin select[name="piece_id"]');
+  if (!wrap || !sel || !piece) { return; }
+  function sync() {
+    var list = SEGMENTS_BY_PIECE[piece.value] || [];
+    sel.innerHTML = '';
+    var whole = document.createElement('option');
+    whole.value = '';
+    whole.textContent = SEGMENT_WHOLE;
+    sel.appendChild(whole);
+    list.forEach(function (s) {
+      var o = document.createElement('option');
+      o.value = s.id;
+      o.textContent = s.label;
+      sel.appendChild(o);
+    });
+    wrap.hidden = list.length === 0;
+  }
+  piece.addEventListener('change', sync);
+  sync();
+})();
 </script>
 {% if Baseline %}
 <section id="baseline" data-done="{{ BaselineDone }}" data-total="{{ BaselineTotal }}">

@@ -63,18 +63,18 @@ differ.
 
 ## Phase 3: User Story 3 — sessions and scope readers
 
-- [ ] T009 [US3] `sessions.segment_id` in the log flows: the
+- [x] T009 [US3] `sessions.segment_id` in the log flows: the
       optional segment select in `templates/day.html` and the
       piece page form, shown only when the piece has segments;
       the session lists show the segment label when present
-- [ ] T010 [US3] Apply the scope helper in `src/readiness.rs`:
+- [x] T010 [US3] Apply the scope helper in `src/readiness.rs`:
       `readiness_coverage`, `audition_conf_rows`,
       `readiness_study_time`, `readiness_weakest` read
       scope-filtered sessions for segmented links and unchanged
       sessions otherwise
-- [ ] T011 [US3] Apply the scope helper to the prep-map tile
+- [x] T011 [US3] Apply the scope helper to the prep-map tile
       levels of an audition in `src/prepmap.rs`
-- [ ] T012 [P] [US3] Unit and integration tests for the scope
+- [x] T012 [P] [US3] Unit and integration tests for the scope
       readers: a segment session raises only its scopes, a
       whole-piece session raises every scope of the piece, an
       unsegmented link reads as before

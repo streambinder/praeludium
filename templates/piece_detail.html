@@ -105,6 +105,7 @@
 {% if s.Minutes > 0 %}<span class="badge"><span data-count="{{ s.Minutes }}">{{ dur(s.Minutes) }}</span></span>{% endif %}
 {% if s.Confidence > 0 %}<span class="badge kind">{{ t("session.security", s.Confidence) }}</span>{% endif %}
 {% if s.BPM.Valid %}<span class="badge kind">{{ t("session.metronome", s.BPM.Int64) }}</span>{% endif %}
+{% if SessionSegments[s.ID|string] %}<span class="badge kind">{{ SessionSegments[s.ID|string] }}</span>{% endif %}
 {% if s.Note == "postponed" %}<span class="badge pin">{{ t("day.badge_postponed") }}</span>{% endif %}
 {% if s.Note == "skipped" %}<span class="badge muted">{{ t("today.skipped_badge") }}</span>{% endif %}
 {% if s.Note == "auto-skipped" %}<span class="badge muted">{{ t("today.skipped_plan_badge") }}</span>{% endif %}
