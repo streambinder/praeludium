@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-24
 
-**Status**: Draft
+**Status**: Complete (merged 2026-10-26 in PR #40, deployed and verified live the same day; coverage 94.00 percent against the 90 percent gate)
 
 **Input**: User description: "Audition programs ask for parts of a
 piece, not always the whole piece. The Haydn first movement is

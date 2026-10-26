@@ -108,7 +108,7 @@ holds.
 - [x] T017 Regression pass on unsegmented fixtures for SC-3:
       pieces, auditions, diary, readiness and plan pages render
       as before the feature
-- [ ] T018 Update the specification status and this task list,
+- [x] T018 Update the specification status and this task list,
       and record the cycle outcome in the pull request body
 
 ## Dependencies
