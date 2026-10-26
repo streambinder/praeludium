@@ -125,6 +125,35 @@ pub struct Session {
     /// Optional metronome mark; None when unrecorded.
     #[serde(rename = "BPM", serialize_with = "ser_null_i64")]
     pub bpm: Option<i64>,
+    /// Segment the session covered; None means the whole piece.
+    #[serde(rename = "SegmentID", serialize_with = "ser_null_i64")]
+    pub segment_id: Option<i64>,
+}
+
+/// A named or ranged part of a piece. A segment is one contiguous
+/// range between two endpoints; an endpoint is an anchor kind
+/// (`start`, `end`, `bar`, `mark`), an anchor value, and a signed
+/// offset in bars.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct Segment {
+    #[serde(rename = "ID")]
+    pub id: i64,
+    #[serde(rename = "PieceID")]
+    pub piece_id: i64,
+    #[serde(rename = "Alias")]
+    pub alias: String,
+    #[serde(rename = "StartKind")]
+    pub start_kind: String,
+    #[serde(rename = "StartValue")]
+    pub start_value: String,
+    #[serde(rename = "StartOffset")]
+    pub start_offset: i64,
+    #[serde(rename = "EndKind")]
+    pub end_kind: String,
+    #[serde(rename = "EndValue")]
+    pub end_value: String,
+    #[serde(rename = "EndOffset")]
+    pub end_offset: i64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
@@ -295,6 +324,24 @@ fn migrate(db: &Connection) -> Result<()> {
 			position INTEGER NOT NULL DEFAULT 1,
 			name TEXT NOT NULL DEFAULT ''
 		)",
+        "CREATE TABLE IF NOT EXISTS segments(
+			id INTEGER PRIMARY KEY,
+			piece_id INTEGER NOT NULL REFERENCES pieces(id) ON DELETE CASCADE,
+			alias TEXT NOT NULL DEFAULT '',
+			start_kind TEXT NOT NULL DEFAULT 'start',
+			start_value TEXT NOT NULL DEFAULT '',
+			start_offset INTEGER NOT NULL DEFAULT 0,
+			end_kind TEXT NOT NULL DEFAULT 'end',
+			end_value TEXT NOT NULL DEFAULT '',
+			end_offset INTEGER NOT NULL DEFAULT 0
+		)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_segments_alias ON segments(piece_id, alias) WHERE alias <> ''",
+        "CREATE TABLE IF NOT EXISTS link_segments(
+			piece_id INTEGER NOT NULL REFERENCES pieces(id) ON DELETE CASCADE,
+			audition_id INTEGER NOT NULL REFERENCES auditions(id) ON DELETE CASCADE,
+			segment_id INTEGER NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+			PRIMARY KEY(piece_id, audition_id, segment_id)
+		)",
     ];
     for s in stmts {
         db.execute_batch(s)?;
@@ -331,6 +378,13 @@ fn migrate(db: &Connection) -> Result<()> {
     // sessions.bpm holds the optional metronome mark of a practice
     // session; NULL when the player did not record one.
     add_column(db, "ALTER TABLE sessions ADD COLUMN bpm INTEGER", "bpm")?;
+    // sessions.segment_id names the segment a session covered;
+    // NULL means the session covered the whole piece.
+    add_column(
+        db,
+        "ALTER TABLE sessions ADD COLUMN segment_id INTEGER REFERENCES segments(id) ON DELETE SET NULL",
+        "segment_id",
+    )?;
     // Stored values started out in Italian; rewrite them in English.
     for q in [
         "UPDATE sessions SET note='skipped' WHERE note='saltato'",
@@ -528,6 +582,110 @@ impl App {
             "DELETE FROM audition_links WHERE id=? AND audition_id=?",
             params![link_id, audition_id],
         )?;
+        Ok(())
+    }
+
+    /// Return the segments of a piece, oldest first.
+    pub fn segments_for_piece(&self, piece_id: i64) -> Result<Vec<Segment>> {
+        let db = self.conn();
+        let mut stmt = db.prepare(
+            "SELECT id, piece_id, alias, start_kind, start_value, start_offset,
+			end_kind, end_value, end_offset FROM segments
+			WHERE piece_id=? ORDER BY id",
+        )?;
+        let rows = stmt
+            .query_map(params![piece_id], |row| {
+                Ok(Segment {
+                    id: row.get(0)?,
+                    piece_id: row.get(1)?,
+                    alias: row.get(2)?,
+                    start_kind: row.get(3)?,
+                    start_value: row.get(4)?,
+                    start_offset: row.get(5)?,
+                    end_kind: row.get(6)?,
+                    end_value: row.get(7)?,
+                    end_offset: row.get(8)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Insert a segment on a piece and return its id. A non-empty
+    /// alias must be unique within the piece (unique index).
+    pub fn add_segment(&self, seg: &Segment) -> Result<i64> {
+        let db = self.conn();
+        db.execute(
+            "INSERT INTO segments(piece_id, alias, start_kind, start_value, start_offset,
+			end_kind, end_value, end_offset) VALUES(?,?,?,?,?,?,?,?)",
+            params![
+                seg.piece_id,
+                seg.alias,
+                seg.start_kind,
+                seg.start_value,
+                seg.start_offset,
+                seg.end_kind,
+                seg.end_value,
+                seg.end_offset
+            ],
+        )?;
+        Ok(db.last_insert_rowid())
+    }
+
+    /// Count the links that reference a segment.
+    pub fn segment_link_count(&self, segment_id: i64) -> Result<i64> {
+        Ok(self.conn().query_row(
+            "SELECT COUNT(*) FROM link_segments WHERE segment_id=?",
+            params![segment_id],
+            |row| row.get(0),
+        )?)
+    }
+
+    /// Delete a segment. A segment that any link references is
+    /// kept, and the function returns false.
+    pub fn delete_segment(&self, segment_id: i64) -> Result<bool> {
+        if self.segment_link_count(segment_id)? > 0 {
+            return Ok(false);
+        }
+        self.conn()
+            .execute("DELETE FROM segments WHERE id=?", params![segment_id])?;
+        Ok(true)
+    }
+
+    /// Return the segment ids a piece-audition link references,
+    /// in definition order.
+    pub fn link_segment_ids(&self, piece_id: i64, audition_id: i64) -> Result<Vec<i64>> {
+        let db = self.conn();
+        let mut stmt = db.prepare(
+            "SELECT segment_id FROM link_segments
+			WHERE piece_id=? AND audition_id=? ORDER BY segment_id",
+        )?;
+        let rows = stmt
+            .query_map(params![piece_id, audition_id], |row| row.get(0))?
+            .collect::<Result<Vec<i64>>>()?;
+        Ok(rows)
+    }
+
+    /// Replace the segment set of a piece-audition link. An id
+    /// that names no segment of the piece is ignored.
+    pub fn set_link_segments(
+        &self,
+        piece_id: i64,
+        audition_id: i64,
+        segment_ids: &[i64],
+    ) -> Result<()> {
+        let db = self.conn();
+        db.execute(
+            "DELETE FROM link_segments WHERE piece_id=? AND audition_id=?",
+            params![piece_id, audition_id],
+        )?;
+        for id in segment_ids {
+            db.execute(
+                "INSERT INTO link_segments(piece_id, audition_id, segment_id)
+				SELECT ?,?, id FROM segments WHERE id=? AND piece_id=?",
+                params![piece_id, audition_id, id, piece_id],
+            )?;
+        }
         Ok(())
     }
 
@@ -796,16 +954,86 @@ mod tests {
             "mock_items",
             "audition_rounds",
             "audition_links",
+            "segments",
+            "link_segments",
         ] {
             assert!(table_exists(&db, table).unwrap(), "missing {table}");
         }
         let cols = table_columns(&db, "pieces").unwrap();
         assert!(cols.contains("difficulty"));
         assert!(cols.contains("target_bpm"));
+        let cols = table_columns(&db, "sessions").unwrap();
+        assert!(cols.contains("segment_id"));
         drop(db);
         // A second migration pass changes nothing.
         let db = app.conn();
         migrate(&db).unwrap();
+    }
+
+    #[test]
+    fn segments_round_trip_links_and_delete_guard() {
+        let app = test_app();
+        {
+            let db = app.conn();
+            db.execute(
+                "INSERT INTO auditions(name, audition_date, weight) VALUES('Roma', '2026-12-06', 4)",
+                [],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO pieces(composer, work, kind) VALUES('Haydn', 'Concerto in Re', 'solo')",
+                [],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO piece_audition(piece_id, audition_id) VALUES(1, 1)",
+                [],
+            )
+            .unwrap();
+        }
+        let cadenza = Segment {
+            piece_id: 1,
+            alias: "Cadenza".into(),
+            start_kind: "bar".into(),
+            start_value: "100".into(),
+            end_kind: "bar".into(),
+            end_value: "130".into(),
+            ..Default::default()
+        };
+        let cadenza_id = app.add_segment(&cadenza).unwrap();
+        let other_id = app
+            .add_segment(&Segment {
+                piece_id: 1,
+                start_kind: "start".into(),
+                end_kind: "bar".into(),
+                end_value: "99".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        // A duplicate alias on the same piece is refused.
+        assert!(app.add_segment(&cadenza).is_err());
+        // An unnamed segment may repeat.
+        assert!(
+            app.add_segment(&Segment {
+                piece_id: 1,
+                ..Default::default()
+            })
+            .is_ok()
+        );
+        let segs = app.segments_for_piece(1).unwrap();
+        assert_eq!(segs.len(), 3);
+        assert_eq!(segs[0].alias, "Cadenza");
+
+        // Link set: a foreign segment id is ignored, members stick.
+        app.set_link_segments(1, 1, &[cadenza_id, 999]).unwrap();
+        assert_eq!(app.link_segment_ids(1, 1).unwrap(), vec![cadenza_id]);
+        // Deletion is refused while a link references the segment.
+        assert!(!app.delete_segment(cadenza_id).unwrap());
+        app.set_link_segments(1, 1, &[]).unwrap();
+        assert!(app.link_segment_ids(1, 1).unwrap().is_empty());
+        assert!(app.delete_segment(cadenza_id).unwrap());
+        assert!(app.delete_segment(other_id).unwrap());
+        assert_eq!(app.segments_for_piece(1).unwrap().len(), 1);
     }
 
     #[test]
