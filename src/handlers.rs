@@ -404,6 +404,10 @@ pub struct TodayData {
     pub pieces: Vec<Piece>,
     #[serde(rename = "Readiness")]
     pub readiness: Vec<ReadinessRow>,
+    /// JSON map of piece id to its segments (id and label), for
+    /// the manual log form.
+    #[serde(rename = "SegmentsJSON")]
+    pub segments_json: String,
 }
 
 /// The piece's non-archived, not-yet-held auditions with their
@@ -1132,6 +1136,23 @@ pub async fn handle_today(State(app): State<Shared>, headers: HeaderMap) -> Resp
         Ok(rows) => data.readiness = rows,
         Err(e) => return err500(&e),
     }
+    {
+        let mut seg_map = serde_json::Map::new();
+        for p in &pieces {
+            match app.segments_for_piece(p.id) {
+                Ok(segs) if !segs.is_empty() => {
+                    let list: Vec<serde_json::Value> = segs
+                        .iter()
+                        .map(|s| serde_json::json!({"id": s.id, "label": s.label}))
+                        .collect();
+                    seg_map.insert(p.id.to_string(), serde_json::Value::Array(list));
+                }
+                Ok(_) => {}
+                Err(e) => return err500(&e),
+            }
+        }
+        data.segments_json = serde_json::Value::Object(seg_map).to_string();
+    }
     render(&headers, "today.html", &data)
 }
 
@@ -1222,13 +1243,34 @@ pub async fn handle_session(State(app): State<Shared>, req: axum::extract::Reque
             _ => None,
         }
     };
+    // A named segment counts only when it belongs to the piece;
+    // anything else logs the whole piece.
+    let segment_id: Option<i64> = {
+        let raw = form.int("segment_id", 0);
+        if raw > 0 {
+            match app.segments_for_piece(piece_id) {
+                Ok(segs) if segs.iter().any(|s| s.id == raw) => Some(raw),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    };
     let today = today_str();
     let inserted = {
         let db = app.db.lock().unwrap_or_else(|p| p.into_inner());
         db.execute(
-            "INSERT INTO sessions(date, piece_id, minutes, confidence, note, bpm)
-			VALUES(?,?,?,?,?,?)",
-            params![today, piece_id, minutes, conf, form.get("note"), bpm],
+            "INSERT INTO sessions(date, piece_id, minutes, confidence, note, bpm, segment_id)
+			VALUES(?,?,?,?,?,?,?)",
+            params![
+                today,
+                piece_id,
+                minutes,
+                conf,
+                form.get("note"),
+                bpm,
+                segment_id
+            ],
         )
         .map(|_| db.last_insert_rowid())
     };
@@ -2480,6 +2522,9 @@ pub struct DayPiece {
     pub prep: f64,
     #[serde(rename = "Sessions")]
     pub sessions: Vec<Session>,
+    /// Segment id to label for this piece, for session lines.
+    #[serde(rename = "SegmentLabels")]
+    pub segment_labels: HashMap<String, String>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -2653,8 +2698,21 @@ pub async fn handle_diary_day(
             Err(e) => return err500(&e),
         }
     };
-    let (entries, minutes, practiced, skip_auto, has_real) =
+    let (mut entries, minutes, practiced, skip_auto, has_real) =
         scan_diary_day(rows, &piece_level, &piece_prep);
+    for e in &mut entries {
+        if e.sessions.iter().any(|s| s.segment_id.is_some()) {
+            match app.segments_for_piece(e.piece_id) {
+                Ok(segs) => {
+                    e.segment_labels = segs
+                        .into_iter()
+                        .map(|s| (s.id.to_string(), s.label))
+                        .collect();
+                }
+                Err(err) => return err500(&err),
+            }
+        }
+    }
     let mut data = DayData {
         title: tr(&lang, "nav.diary", &[]),
         nav: "diary".to_string(),
@@ -2882,6 +2940,9 @@ pub struct PieceDetailData {
     pub has_tempo: bool,
     #[serde(rename = "TempoLatest")]
     pub tempo_latest: i64,
+    /// Session id to segment label, for sessions on a segment.
+    #[serde(rename = "SessionSegments")]
+    pub session_segments: HashMap<String, String>,
 }
 
 pub async fn handle_piece_detail(
@@ -2964,6 +3025,23 @@ pub async fn handle_piece_detail(
     if chrono::NaiveDate::parse_from_str(&recorder_date, "%Y-%m-%d").is_err() {
         recorder_date = today.clone();
     }
+    let mut session_segments: HashMap<String, String> = HashMap::new();
+    if sessions.iter().any(|s| s.segment_id.is_some()) {
+        match app.segments_for_piece(p.id) {
+            Ok(segs) => {
+                let by_id: HashMap<i64, String> =
+                    segs.into_iter().map(|s| (s.id, s.label)).collect();
+                for s in &sessions {
+                    if let Some(seg_id) = s.segment_id
+                        && let Some(label) = by_id.get(&seg_id)
+                    {
+                        session_segments.insert(s.id.to_string(), label.clone());
+                    }
+                }
+            }
+            Err(e) => return err500(&e),
+        }
+    }
     // The tempo signal exists only when sessions carry a BPM; the
     // target line joins only when the piece has a target tempo.
     let tps = crate::readiness::tempo_points(&sessions);
@@ -2992,6 +3070,7 @@ pub async fn handle_piece_detail(
             tempo,
             has_tempo: !tps.is_empty(),
             tempo_latest,
+            session_segments,
         },
     )
 }
@@ -3241,7 +3320,7 @@ pub async fn handle_readiness(
     }
     data.mocks = mocks;
     // Weakest pieces first: the attack list.
-    match app.readiness_weakest(&pieces) {
+    match app.readiness_weakest(c.id, &pieces) {
         Ok(v) => data.weakest = v,
         Err(e) => return err500(&e),
     }

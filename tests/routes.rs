@@ -1049,3 +1049,76 @@ async fn segment_link_time_flow_and_orphan_gc() {
     assert_eq!(app.segments_for_piece(1).unwrap().len(), 1);
     assert_eq!(app.link_segment_ids(1, 1).unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn session_logging_with_segment_scope() {
+    let (r, app) = test_app();
+    r.clone()
+        .oneshot(form_req("/auditions", "name=Roma&date=2026-12-06&weight=4"))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Haydn&work=Concerto+in+Re&kind=solo&difficulty=3&audition=1&segnew-alias-1=Cadenza&segnew-start-kind-1=bar&segnew-start-value-1=100&segnew-end-kind-1=bar&segnew-end-value-1=130",
+        ))
+        .await
+        .unwrap();
+    let seg_id = app.segments_for_piece(1).unwrap()[0].id;
+
+    // Log on the segment: the session carries it and the piece
+    // page names it.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/session",
+            &format!("piece_id=1&minutes=25&confidence=4&segment_id={seg_id}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    {
+        let db = app.db.lock().unwrap();
+        let stored: Option<i64> = db
+            .query_row(
+                "SELECT segment_id FROM sessions WHERE piece_id=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored, Some(seg_id));
+    }
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/diary/piece/1"))
+        .await
+        .unwrap();
+    assert!(body_string(resp).await.contains("Cadenza"));
+
+    // A segment id of another piece falls back to whole piece.
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Bach&work=Suite&kind=solo&difficulty=3",
+        ))
+        .await
+        .unwrap();
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/session",
+            &format!("piece_id=2&minutes=10&confidence=3&segment_id={seg_id}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let db = app.db.lock().unwrap();
+    let stored: Option<i64> = db
+        .query_row(
+            "SELECT segment_id FROM sessions WHERE piece_id=2",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored, None);
+}

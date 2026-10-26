@@ -49,7 +49,8 @@ pub struct PrepTile {
 pub struct PrepSession {
     pub date: String, // YYYY-MM-DD
     pub minutes: i64,
-    pub confidence: i64, // 0 = not rated
+    pub confidence: i64,         // 0 = not rated
+    pub segment_id: Option<i64>, // None = the whole piece
 }
 
 /// Aspect biases for the two map layouts. The layout runs in a
@@ -136,7 +137,7 @@ impl App {
     pub fn prep_sessions(&self, piece_id: i64) -> Result<Vec<PrepSession>> {
         let db = self.db.lock().unwrap_or_else(|p| p.into_inner());
         let mut stmt = db.prepare(
-            "SELECT date, minutes, confidence FROM sessions
+            "SELECT date, minutes, confidence, segment_id FROM sessions
 			WHERE piece_id=? ORDER BY date DESC, id DESC",
         )?;
         let rows = stmt
@@ -145,6 +146,7 @@ impl App {
                     date: row.get(0)?,
                     minutes: row.get(1)?,
                     confidence: row.get(2)?,
+                    segment_id: row.get(3)?,
                 })
             })?
             .collect::<Result<Vec<_>>>()?;
@@ -170,6 +172,13 @@ impl App {
         let today = chrono::NaiveDate::parse_from_str(today_str, "%Y-%m-%d").map_err(|e| {
             rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
         })?;
+        // A view filtered to exactly one audition reads each
+        // tile through that link: sessions outside the link scope
+        // do not raise the tile. Wider views stay piece-global.
+        let scope_audition = match selected {
+            Some(sel) if sel.len() == 1 => sel.iter().next().copied(),
+            _ => None,
+        };
         let mut tiles = Vec::with_capacity(pieces.len());
         for p in &pieces {
             if let Some(sel) = selected
@@ -177,7 +186,13 @@ impl App {
             {
                 continue;
             }
-            let sessions = self.prep_sessions(p.id)?;
+            let mut sessions = self.prep_sessions(p.id)?;
+            if let Some(aid) = scope_audition {
+                let scope = self.link_segment_ids(p.id, aid)?;
+                if !scope.is_empty() {
+                    sessions.retain(|s| crate::segments::counts(s.segment_id, &scope));
+                }
+            }
             let (score, level, avg_conf, rated) = prep_score(p.difficulty, &sessions, today);
             let minutes: i64 = sessions.iter().map(|s| s.minutes).sum();
             let label = format!("{} — {}", p.composer, p.work).trim().to_string();
@@ -424,6 +439,7 @@ mod tests {
             date: date.to_string(),
             minutes,
             confidence,
+            segment_id: None,
         }
     }
 
