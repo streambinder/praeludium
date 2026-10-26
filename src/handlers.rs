@@ -1450,16 +1450,80 @@ pub async fn handle_add_piece(State(app): State<Shared>, req: axum::extract::Req
     for cid in form.ids("audition") {
         let excerpt = link_excerpt(&form, cid);
         let round = link_round(&app, &form, cid);
-        let db = app.db.lock().unwrap_or_else(|p| p.into_inner());
-        if let Err(e) = db.execute(
-            "INSERT OR IGNORE INTO piece_audition(piece_id, audition_id, excerpt, round_id) VALUES(?,?,?,?)",
-            params![pid, cid, excerpt, round],
-        ) {
-            return err500(&e);
+        {
+            let db = app.db.lock().unwrap_or_else(|p| p.into_inner());
+            if let Err(e) = db.execute(
+                "INSERT OR IGNORE INTO piece_audition(piece_id, audition_id, excerpt, round_id) VALUES(?,?,?,?)",
+                params![pid, cid, excerpt, round],
+            ) {
+                return err500(&e);
+            }
         }
+        if let Some(seg) = inline_segment(&form, cid, pid) {
+            match app.find_or_create_segment(&seg) {
+                Ok(seg_id) => {
+                    if let Err(e) = app.set_link_segments(pid, cid, &[seg_id]) {
+                        return err500(&e);
+                    }
+                }
+                Err(e) => return err500(&e),
+            }
+        }
+    }
+    if let Err(e) = app.gc_orphan_segments() {
+        return err500(&e);
     }
     eprintln!("event piece created id={pid} kind={kind}");
     see_other("/pieces")
+}
+
+/// Parse one anchor kind field of a link form. An unknown value
+/// falls back to the default anchor of its side.
+fn anchor_kind(raw: &str, default: &str) -> String {
+    match raw {
+        "bar" => "bar".to_string(),
+        "mark" => "mark".to_string(),
+        "start" => "start".to_string(),
+        "end" => "end".to_string(),
+        _ => default.to_string(),
+    }
+}
+
+/// Read the inline new segment of one audition row of a link
+/// form. The segment counts as filled when the owner typed an
+/// alias, an endpoint value, or a non-zero offset; an untouched
+/// block returns None and the link stays on the whole piece.
+pub fn inline_segment(form: &FormData, cid: i64, piece_id: i64) -> Option<crate::db::Segment> {
+    let alias = form.get(&format!("segnew-alias-{cid}")).trim().to_string();
+    let start_value = form
+        .get(&format!("segnew-start-value-{cid}"))
+        .trim()
+        .to_string();
+    let end_value = form
+        .get(&format!("segnew-end-value-{cid}"))
+        .trim()
+        .to_string();
+    let start_offset = form.int(&format!("segnew-start-offset-{cid}"), 0);
+    let end_offset = form.int(&format!("segnew-end-offset-{cid}"), 0);
+    if alias.is_empty()
+        && start_value.is_empty()
+        && end_value.is_empty()
+        && start_offset == 0
+        && end_offset == 0
+    {
+        return None;
+    }
+    Some(crate::db::Segment {
+        piece_id,
+        alias,
+        start_kind: anchor_kind(form.get(&format!("segnew-start-kind-{cid}")), "start"),
+        start_value,
+        start_offset,
+        end_kind: anchor_kind(form.get(&format!("segnew-end-kind-{cid}")), "end"),
+        end_value,
+        end_offset,
+        ..Default::default()
+    })
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -1653,10 +1717,23 @@ pub async fn handle_update_piece(
         return err500(&e);
     }
     for cid in &audition_ids {
-        let seg_ids = form.ids(&format!("segment-{cid}"));
+        let mut seg_ids = form.ids(&format!("segment-{cid}"));
+        if let Some(seg) = inline_segment(&form, *cid, id) {
+            match app.find_or_create_segment(&seg) {
+                Ok(seg_id) => {
+                    if !seg_ids.contains(&seg_id) {
+                        seg_ids.push(seg_id);
+                    }
+                }
+                Err(e) => return err500(&e),
+            }
+        }
         if let Err(e) = app.set_link_segments(id, *cid, &seg_ids) {
             return err500(&e);
         }
+    }
+    if let Err(e) = app.gc_orphan_segments() {
+        return err500(&e);
     }
     eprintln!("event piece updated id={id}");
     see_other("/pieces")
@@ -2805,10 +2882,6 @@ pub struct PieceDetailData {
     pub has_tempo: bool,
     #[serde(rename = "TempoLatest")]
     pub tempo_latest: i64,
-    #[serde(rename = "Segments")]
-    pub segments: Vec<crate::db::Segment>,
-    #[serde(rename = "SegNotice")]
-    pub seg_notice: String,
 }
 
 pub async fn handle_piece_detail(
@@ -2886,16 +2959,7 @@ pub async fn handle_piece_detail(
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
-    let segments = match app.segments_for_piece(p.id) {
-        Ok(v) => v,
-        Err(e) => return err500(&e),
-    };
     let form = FormData::query_only(uri.query().unwrap_or(""));
-    let seg_notice = match form.get("segmsg") {
-        "linked" => tr(&req_lang(&headers), "segment.linked_warn", &[]),
-        "alias" => tr(&req_lang(&headers), "segment.alias_dup", &[]),
-        _ => String::new(),
-    };
     let mut recorder_date = form.get("date").to_string();
     if chrono::NaiveDate::parse_from_str(&recorder_date, "%Y-%m-%d").is_err() {
         recorder_date = today.clone();
@@ -2928,87 +2992,8 @@ pub async fn handle_piece_detail(
             tempo,
             has_tempo: !tps.is_empty(),
             tempo_latest,
-            segments,
-            seg_notice,
         },
     )
-}
-
-/// Add a segment to a piece from the piece page form. An anchor
-/// kind outside the known set falls back to the default anchor
-/// of its side. A duplicate alias returns to the piece page
-/// with a notice instead of an error page.
-pub async fn handle_add_segment(
-    State(app): State<Shared>,
-    Path(id): Path<String>,
-    req: axum::extract::Request,
-) -> Response {
-    let p = match app.piece_or_404(&id) {
-        Ok(p) => p,
-        Err(r) => return r,
-    };
-    let (_headers, _q, form) = match form_of(req).await {
-        Ok(v) => v,
-        Err(r) => return r,
-    };
-    let kind_of = |name: &str, default: &str| -> String {
-        match form.get(name) {
-            "bar" => "bar".to_string(),
-            "mark" => "mark".to_string(),
-            "start" => "start".to_string(),
-            "end" => "end".to_string(),
-            _ => default.to_string(),
-        }
-    };
-    let seg = crate::db::Segment {
-        piece_id: p.id,
-        alias: form.get("alias").trim().to_string(),
-        start_kind: kind_of("start_kind", "start"),
-        start_value: form.get("start_value").trim().to_string(),
-        start_offset: form.int("start_offset", 0),
-        end_kind: kind_of("end_kind", "end"),
-        end_value: form.get("end_value").trim().to_string(),
-        end_offset: form.int("end_offset", 0),
-        ..Default::default()
-    };
-    match app.add_segment(&seg) {
-        Ok(new_id) => {
-            eprintln!("event segment added piece={} id={new_id}", p.id);
-            see_other(&format!("/diary/piece/{}", p.id))
-        }
-        Err(_) => see_other(&format!("/diary/piece/{}?segmsg=alias", p.id)),
-    }
-}
-
-/// Delete one segment of a piece. A segment that a link still
-/// references is kept, and the owner lands back on the piece
-/// page with a notice.
-pub async fn handle_delete_segment(
-    State(app): State<Shared>,
-    Path((id, segment_id)): Path<(String, String)>,
-) -> Response {
-    let p = match app.piece_or_404(&id) {
-        Ok(p) => p,
-        Err(r) => return r,
-    };
-    let Some(seg_id) = path_id(&segment_id) else {
-        return not_found();
-    };
-    let owns = match app.segments_for_piece(p.id) {
-        Ok(v) => v.iter().any(|s| s.id == seg_id),
-        Err(e) => return err500(&e),
-    };
-    if !owns {
-        return not_found();
-    }
-    match app.delete_segment(seg_id) {
-        Ok(true) => {
-            eprintln!("event segment deleted piece={} id={seg_id}", p.id);
-            see_other(&format!("/diary/piece/{}", p.id))
-        }
-        Ok(false) => see_other(&format!("/diary/piece/{}?segmsg=linked", p.id)),
-        Err(e) => err500(&e),
-    }
 }
 
 // ---------- settings ----------
@@ -3947,11 +3932,6 @@ pub fn router(app: Shared) -> axum::Router {
         .route("/pieces/{id}/archive", post(handle_archive_piece))
         .route("/pieces/{id}/restore", post(handle_restore_piece))
         .route("/pieces/{id}/recordings", post(handle_upload_recording))
-        .route("/pieces/{id}/segments", post(handle_add_segment))
-        .route(
-            "/pieces/{id}/segments/{segmentID}/delete",
-            post(handle_delete_segment),
-        )
         .route(
             "/auditions",
             get(handle_auditions).post(handle_add_audition),

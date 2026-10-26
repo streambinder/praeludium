@@ -962,123 +962,90 @@ async fn recording_delete_flow() {
 }
 
 #[tokio::test]
-async fn segment_define_link_render_and_delete_guard() {
+async fn segment_link_time_flow_and_orphan_gc() {
     let (r, app) = test_app();
-    r.clone()
-        .oneshot(form_req("/auditions", "name=Roma&date=2026-12-06&weight=4"))
-        .await
-        .unwrap();
-    r.clone()
+    for name in ["Roma", "Napoli"] {
+        r.clone()
+            .oneshot(form_req(
+                "/auditions",
+                &format!("name={name}&date=2026-12-06&weight=4"),
+            ))
+            .await
+            .unwrap();
+    }
+
+    // Add the piece to Roma with an inline new segment: the
+    // segment is born on the piece and selected for the link.
+    let resp = r
+        .clone()
         .oneshot(form_req(
             "/pieces",
-            "composer=Haydn&work=Concerto+in+Re&kind=solo&difficulty=3&audition=1",
-        ))
-        .await
-        .unwrap();
-
-    // Define an aliased segment and an unnamed bar range.
-    let resp = r
-        .clone()
-        .oneshot(form_req(
-            "/pieces/1/segments",
-            "alias=Cadenza&start_kind=bar&start_value=100&start_offset=0&end_kind=bar&end_value=130&end_offset=0",
+            "composer=Haydn&work=Concerto+in+Re&kind=solo&difficulty=3&audition=1&segnew-alias-1=Cadenza&segnew-start-kind-1=bar&segnew-start-value-1=100&segnew-end-kind-1=bar&segnew-end-value-1=130",
         ))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::SEE_OTHER);
-    r.clone()
-        .oneshot(form_req(
-            "/pieces/1/segments",
-            "alias=&start_kind=start&start_value=&start_offset=0&end_kind=bar&end_value=99&end_offset=0",
-        ))
-        .await
-        .unwrap();
     let segs = app.segments_for_piece(1).unwrap();
-    assert_eq!(segs.len(), 2);
+    assert_eq!(segs.len(), 1);
     assert_eq!(segs[0].label, "Cadenza");
-    assert_eq!(segs[1].label, "inizio\u{2013}b. 99");
-    let cadenza_id = segs[0].id;
+    let seg_id = segs[0].id;
+    assert_eq!(app.link_segment_ids(1, 1).unwrap(), vec![seg_id]);
 
-    // A duplicate alias bounces back with the alias notice.
-    let resp = r
-        .clone()
-        .oneshot(form_req(
-            "/pieces/1/segments",
-            "alias=Cadenza&start_kind=start&end_kind=end",
-        ))
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
-    assert!(
-        resp.headers()
-            .get(header::LOCATION)
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .contains("segmsg=alias")
-    );
-
-    // The piece page lists the segment.
+    // The audition program names the part; the piece page has
+    // no segment management surface.
+    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
+    assert!(body_string(resp).await.contains("Cadenza"));
     let resp = r
         .clone()
         .oneshot(req("GET", "/diary/piece/1"))
         .await
         .unwrap();
-    assert!(body_string(resp).await.contains("Cadenza"));
+    let body = body_string(resp).await;
+    assert!(body.contains("Cadenza"));
+    assert!(!body.contains("segnew"));
 
-    // Link only the Cadenza to Roma through the piece form.
-    let resp = r
-        .clone()
-        .oneshot(form_req(
-            "/pieces/1/edit",
-            &format!("composer=Haydn&work=Concerto+in+Re&kind=solo&difficulty=3&audition=1&segment-1={cadenza_id}"),
-        ))
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
-    assert_eq!(app.link_segment_ids(1, 1).unwrap(), vec![cadenza_id]);
-
-    // The audition page names the required part.
-    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
-    assert!(body_string(resp).await.contains("Cadenza"));
-
-    // Deletion is refused while the link references the segment.
-    let resp = r
-        .clone()
-        .oneshot(form_req(
-            &format!("/pieces/1/segments/{cadenza_id}/delete"),
-            "",
-        ))
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
-    assert!(
-        resp.headers()
-            .get(header::LOCATION)
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .contains("segmsg=linked")
-    );
-    assert_eq!(app.segments_for_piece(1).unwrap().len(), 2);
-
-    // Unlink through the form, then deletion succeeds.
+    // Link Napoli to the same segment through the edit form.
     r.clone()
         .oneshot(form_req(
             "/pieces/1/edit",
-            "composer=Haydn&work=Concerto+in+Re&kind=solo&difficulty=3&audition=1",
+            &format!("composer=Haydn&work=Concerto+in+Re&kind=solo&difficulty=3&audition=1&audition=2&segment-1={seg_id}&segment-2={seg_id}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(app.link_segment_ids(1, 2).unwrap(), vec![seg_id]);
+
+    // Roma drops to the whole piece: the segment survives
+    // because Napoli still asks for it.
+    r.clone()
+        .oneshot(form_req(
+            "/pieces/1/edit",
+            &format!("composer=Haydn&work=Concerto+in+Re&kind=solo&difficulty=3&audition=1&audition=2&segment-2={seg_id}"),
         ))
         .await
         .unwrap();
     assert!(app.link_segment_ids(1, 1).unwrap().is_empty());
-    let resp = r
-        .clone()
+    assert_eq!(app.segments_for_piece(1).unwrap().len(), 1);
+
+    // Napoli drops it too: no link references it, it is gone.
+    r.clone()
         .oneshot(form_req(
-            &format!("/pieces/1/segments/{cadenza_id}/delete"),
-            "",
+            "/pieces/1/edit",
+            "composer=Haydn&work=Concerto+in+Re&kind=solo&difficulty=3&audition=1&audition=2",
         ))
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert!(app.segments_for_piece(1).unwrap().is_empty());
+
+    // The same inline definition twice creates one segment.
+    for _ in 0..2 {
+        r.clone()
+            .oneshot(form_req(
+                "/pieces/1/edit",
+                "composer=Haydn&work=Concerto+in+Re&kind=solo&difficulty=3&audition=1&segnew-alias-1=Cadenza&segnew-start-kind-1=bar&segnew-start-value-1=100&segnew-end-kind-1=bar&segnew-end-value-1=130",
+            ))
+            .await
+            .unwrap();
+    }
     assert_eq!(app.segments_for_piece(1).unwrap().len(), 1);
+    assert_eq!(app.link_segment_ids(1, 1).unwrap().len(), 1);
 }

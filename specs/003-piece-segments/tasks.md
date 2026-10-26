@@ -39,17 +39,20 @@ rule exists in one place. No surface changes yet.
 
 ## Phase 2: User Story 4 and User Story 1 — define and link
 
-- [x] T005 [US4] Piece detail: segments section and add form in
-      `templates/piece_detail.html`, handlers in
-      `src/handlers.rs`; done when an owner can define an aliased
-      and an unnamed segment on a piece and see both labels
-- [x] T006 [US4] Segment deletion in `src/handlers.rs`: refused
-      with a message while any link references the segment;
-      allowed otherwise; integration test covers both branches
-- [x] T007 [US1] Link editor: per linked piece with segments,
-      one checkbox per segment in
-      `templates/audition_detail.html`; saving rewrites the
-      `link_segments` rows of the link in `src/handlers.rs`
+- [x] T005 [US4] Link-time definition (amended 2026-10-26): the
+      link rows of `templates/pieces.html` and
+      `templates/piece_form.html` carry an inline new segment
+      block (`templates/segment_new.html`); `inline_segment` and
+      `find_or_create_segment` create and select it on save. No
+      segment surface exists on the piece page
+- [x] T006 [US4] Orphan removal: `gc_orphan_segments` runs after
+      every link save; a segment no link references is deleted
+      and its sessions fall back to the whole piece; the routes
+      test covers survival across links and removal
+- [x] T007 [US1] Link editor: per linked audition, one checkbox
+      per segment of the piece in `templates/piece_form.html`;
+      saving rewrites the `link_segments` rows of the link in
+      `src/handlers.rs`
 - [x] T008 [US1] Program rendering: the audition page lists the
       segment labels of each link beside the piece; a link
       without segments renders exactly as today (SC-3 anchor)

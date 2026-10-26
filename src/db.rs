@@ -702,6 +702,49 @@ impl App {
         Ok(())
     }
 
+    /// Find the segment of a piece that matches a full
+    /// definition, or create it. The link flow uses this for its
+    /// inline new segment, so a repeated save never duplicates.
+    pub fn find_or_create_segment(&self, seg: &Segment) -> Result<i64> {
+        let found: Option<i64> = {
+            let db = self.conn();
+            db.query_row(
+                "SELECT id FROM segments WHERE piece_id=? AND alias=?
+				AND start_kind=? AND start_value=? AND start_offset=?
+				AND end_kind=? AND end_value=? AND end_offset=?",
+                params![
+                    seg.piece_id,
+                    seg.alias,
+                    seg.start_kind,
+                    seg.start_value,
+                    seg.start_offset,
+                    seg.end_kind,
+                    seg.end_value,
+                    seg.end_offset
+                ],
+                |row| row.get(0),
+            )
+            .ok()
+        };
+        match found {
+            Some(id) => Ok(id),
+            None => self.add_segment(seg),
+        }
+    }
+
+    /// Delete every segment that no link references and return
+    /// how many were removed. A segment exists only while at
+    /// least one audition asks for it; sessions that named a
+    /// removed segment fall back to the whole piece (foreign key
+    /// SET NULL).
+    pub fn gc_orphan_segments(&self) -> Result<i64> {
+        let n = self.conn().execute(
+            "DELETE FROM segments WHERE id NOT IN (SELECT segment_id FROM link_segments)",
+            [],
+        )?;
+        Ok(n as i64)
+    }
+
     /// Replace the segment set of a piece-audition link. An id
     /// that names no segment of the piece is ignored.
     pub fn set_link_segments(
