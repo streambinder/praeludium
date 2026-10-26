@@ -320,6 +320,10 @@ pub struct PlanItem {
     pub minutes: i64,
     #[serde(rename = "Logged")]
     pub logged: i64,
+    /// The segment scope of the item; empty means the whole
+    /// piece. Upcoming holds only the auditions of this scope.
+    #[serde(rename = "Segments")]
+    pub segments: Vec<crate::db::Segment>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -485,7 +489,117 @@ impl App {
             practiced: mark.practiced,
             minutes: 0,
             logged: mark.logged,
+            segments: Vec::new(),
         }))
+    }
+
+    /// Score one piece once per distinct link scope of its
+    /// upcoming auditions. Auditions that ask the same part of
+    /// the piece merge into one item whose destinations they
+    /// are; every scoring input reads only the sessions that
+    /// count toward the scope. An explicit skip marker names
+    /// the whole piece and suppresses every scope.
+    pub fn score_piece_scopes(
+        &self,
+        p: &Piece,
+        today: &str,
+        coeffs: Coeffs,
+    ) -> DbResult<Vec<PlanItem>> {
+        let (upcoming, _, _) = upcoming_auditions(p, today)?;
+        if upcoming.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mark = self.today_mark(p.id, today)?;
+        if mark.skipped {
+            return Ok(Vec::new());
+        }
+        let mut groups: Vec<(Vec<i64>, Vec<Audition>)> = Vec::new();
+        for c in &upcoming {
+            let scope = self.link_segment_ids(p.id, c.id)?;
+            match groups.iter_mut().find(|(s, _)| *s == scope) {
+                Some(g) => g.1.push(c.clone()),
+                None => groups.push((scope, vec![c.clone()])),
+            }
+        }
+        let sessions = self.prep_sessions(p.id)?;
+        let segs_by_id: HashMap<i64, crate::db::Segment> = self
+            .segments_for_piece(p.id)?
+            .into_iter()
+            .map(|s| (s.id, s))
+            .collect();
+        let mut items = Vec::new();
+        for (scope, auds) in groups {
+            let weights: Vec<i64> = auds.iter().map(|c| c.weight).collect();
+            let mut days = i64::MAX;
+            for c in &auds {
+                days = days.min(days_between(today, &c.date)?);
+            }
+            // The latest rated session that counts toward the
+            // scope, baseline declarations included, mirrors the
+            // whole-piece confidence rule.
+            let (mut conf, mut rated) = (2.5f64, false);
+            for s in &sessions {
+                if (s.confidence > 0 || s.note == "baseline")
+                    && crate::segments::counts(s.segment_id, &scope)
+                {
+                    conf = s.confidence as f64;
+                    rated = true;
+                    break;
+                }
+            }
+            let mut since = 30i64;
+            let mut since_never = true;
+            let (mut practiced, mut logged) = (false, 0i64);
+            for s in &sessions {
+                if s.minutes > 0 && crate::segments::counts(s.segment_id, &scope) {
+                    if since_never {
+                        since = days_between(&s.date, today)?.max(0);
+                        since_never = false;
+                    }
+                    if s.date == today {
+                        practiced = true;
+                    }
+                }
+                if s.date == today && crate::segments::counts(s.segment_id, &scope) {
+                    logged += s.minutes;
+                }
+            }
+            let br = compute_score(
+                &ScoreInput {
+                    weights,
+                    days,
+                    confidence: conf,
+                    since_days: since,
+                    difficulty: p.difficulty,
+                },
+                coeffs,
+            );
+            let segments: Vec<crate::db::Segment> = scope
+                .iter()
+                .filter_map(|id| segs_by_id.get(id).cloned())
+                .collect();
+            items.push(PlanItem {
+                piece: p.clone(),
+                upcoming: auds,
+                base: br.base,
+                days,
+                urgency: br.urgency,
+                need: br.need,
+                recency: br.recency,
+                rest: br.rest,
+                diff: br.diff,
+                score: br.score,
+                conf,
+                conf_rated: rated,
+                since,
+                since_never,
+                practiced,
+                minutes: 0,
+                logged,
+                segments,
+            });
+        }
+        Ok(items)
     }
 
     pub fn build_plan(&self, today: &str) -> DbResult<Vec<PlanItem>> {
@@ -493,9 +607,7 @@ impl App {
         let pieces = self.list_pieces(0, "", false, "")?;
         let mut items = Vec::new();
         for p in &pieces {
-            if let Some(item) = self.score_piece(p, today, coeffs, false)? {
-                items.push(item);
-            }
+            items.extend(self.score_piece_scopes(p, today, coeffs)?);
         }
         sort_plan_items(&mut items);
         Ok(items)
@@ -546,7 +658,8 @@ impl App {
     }
 }
 
-/// Order plan items by score, then base, then piece id.
+/// Order plan items by score, then base, then piece id, then
+/// segment scope, so two scopes of one piece order stably.
 pub fn sort_plan_items(items: &mut [PlanItem]) {
     items.sort_by(|a, b| {
         b.score
@@ -558,6 +671,11 @@ pub fn sort_plan_items(items: &mut [PlanItem]) {
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
             .then_with(|| a.piece.id.cmp(&b.piece.id))
+            .then_with(|| {
+                let ka: Vec<i64> = a.segments.iter().map(|s| s.id).collect();
+                let kb: Vec<i64> = b.segments.iter().map(|s| s.id).collect();
+                ka.cmp(&kb)
+            })
     });
 }
 
@@ -4483,6 +4601,66 @@ mod tests {
             .unwrap();
         assert!(item.practiced);
         assert_eq!(item.logged, 15);
+    }
+
+    #[test]
+    fn build_plan_groups_by_segment_scope() {
+        let app = test_app();
+        seed_audition(&app, 1, "2026-11-01", 4);
+        seed_audition(&app, 2, "2026-11-15", 3);
+        seed_audition(&app, 3, "2026-12-01", 2);
+        seed_piece(&app, 1, 3);
+        link(&app, 1, 1);
+        link(&app, 1, 2);
+        link(&app, 1, 3);
+        {
+            let db = app.db.lock().unwrap();
+            db.execute(
+                "INSERT INTO segments (id, piece_id, alias) VALUES (10, 1, 'Cadenza'), (11, 1, 'Finale')",
+                [],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO link_segments (piece_id, audition_id, segment_id) VALUES (1, 1, 10), (1, 2, 10), (1, 3, 11)",
+                [],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO sessions (date, piece_id, minutes, confidence, note, segment_id) VALUES \
+                 ('2026-10-18', 1, 20, 5, '', 10), ('2026-10-19', 1, 10, 1, '', 11), ('2026-10-10', 1, 5, 3, '', NULL)",
+                [],
+            )
+            .unwrap();
+        }
+        let plan = app.build_plan("2026-10-20").unwrap();
+        // Two scopes of one piece: {10} for auditions 1 and 2,
+        // {11} for audition 3. Equal scopes merge into one item.
+        assert_eq!(plan.len(), 2);
+        let a = plan
+            .iter()
+            .find(|it| it.segments.len() == 1 && it.segments[0].id == 10)
+            .unwrap();
+        assert_eq!(a.upcoming.len(), 2);
+        assert_eq!(a.base, 7.0);
+        assert_eq!(a.segments[0].label, "Cadenza");
+        // Scope inputs: the segment session is the newest that
+        // counts toward {10}; the {11} session does not leak in.
+        assert_eq!(a.conf, 5.0);
+        assert_eq!(a.since, 2);
+        let b = plan
+            .iter()
+            .find(|it| it.segments.len() == 1 && it.segments[0].id == 11)
+            .unwrap();
+        assert_eq!(b.upcoming.len(), 1);
+        assert_eq!(b.base, 2.0);
+        assert_eq!(b.conf, 1.0);
+        assert_eq!(b.since, 1);
+        // A whole-piece session counts toward every scope: it
+        // is older than both segment sessions here, so it moves
+        // neither confidence. Logging one today practices both.
+        seed_session(&app, "2026-10-20", 1, 15, 0, "");
+        let plan = app.build_plan("2026-10-20").unwrap();
+        assert!(plan.iter().all(|it| it.practiced && it.logged == 15));
     }
 
     #[test]
