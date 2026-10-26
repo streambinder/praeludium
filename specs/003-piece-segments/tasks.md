@@ -84,15 +84,15 @@ seeded database.
 
 ## Phase 4: User Story 2 — the plan speaks in parts
 
-- [ ] T013 [US2] Group plan candidates by piece and segment set
+- [x] T013 [US2] Group plan candidates by piece and segment set
       in `fill_today_plan` (`src/handlers.rs`); `PlanItem`
       carries the segment set and every destination audition of
       its group; scoring inputs of an item are its
       scope-filtered sessions
-- [ ] T014 [US2] Today card in `templates/today.html`: segment
+- [x] T014 [US2] Today card in `templates/today.html`: segment
       label and destination auditions render only for segmented
       items; unsegmented cards are byte-identical to today
-- [ ] T015 [P] [US2] Tests for grouping and merging: two links
+- [x] T015 [P] [US2] Tests for grouping and merging: two links
       with equal piece and set merge into one item; two sets of
       one piece stay two items; an unsegmented day plan equals
       the pre-feature plan on the same fixture

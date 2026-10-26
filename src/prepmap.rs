@@ -51,6 +51,7 @@ pub struct PrepSession {
     pub minutes: i64,
     pub confidence: i64,         // 0 = not rated
     pub segment_id: Option<i64>, // None = the whole piece
+    pub note: String,            // marker note (baseline, skipped, ...)
 }
 
 /// Aspect biases for the two map layouts. The layout runs in a
@@ -137,7 +138,7 @@ impl App {
     pub fn prep_sessions(&self, piece_id: i64) -> Result<Vec<PrepSession>> {
         let db = self.db.lock().unwrap_or_else(|p| p.into_inner());
         let mut stmt = db.prepare(
-            "SELECT date, minutes, confidence, segment_id FROM sessions
+            "SELECT date, minutes, confidence, segment_id, note FROM sessions
 			WHERE piece_id=? ORDER BY date DESC, id DESC",
         )?;
         let rows = stmt
@@ -147,6 +148,7 @@ impl App {
                     minutes: row.get(1)?,
                     confidence: row.get(2)?,
                     segment_id: row.get(3)?,
+                    note: row.get(4)?,
                 })
             })?
             .collect::<Result<Vec<_>>>()?;
@@ -440,6 +442,7 @@ mod tests {
             minutes,
             confidence,
             segment_id: None,
+            note: String::new(),
         }
     }
 

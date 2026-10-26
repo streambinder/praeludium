@@ -1122,3 +1122,56 @@ async fn session_logging_with_segment_scope() {
         .unwrap();
     assert_eq!(stored, None);
 }
+
+#[tokio::test]
+async fn today_plan_renders_segmented_items() {
+    let (r, app) = test_app();
+    let today = today();
+    {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO auditions (id, name, audition_date, weight) VALUES (1, 'Roma', '2027-01-10', 4), (2, 'Napoli', '2027-02-10', 3)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO pieces (id, composer, work, movement, kind, difficulty) VALUES (1, 'Haydn', 'Concerto in Re', 'I mov.', 'solo', 3)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO piece_audition (piece_id, audition_id) VALUES (1, 1), (1, 2)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO segments (id, piece_id, alias) VALUES (10, 1, 'Cadenza')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO link_segments (piece_id, audition_id, segment_id) VALUES (1, 1, 10)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO sessions (date, piece_id, minutes, confidence, note) VALUES (?1, 1, 0, 3, 'baseline')",
+            rusqlite::params![today],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO availability (date, start_min, end_min, kind) VALUES (?1, 0, 1439, 'free')",
+            rusqlite::params![today],
+        )
+        .unwrap();
+    }
+    let resp = r.clone().oneshot(req("GET", "/")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    // Two items for one piece: the Cadenza scope for Roma and
+    // the whole piece for Napoli. The segmented card names the
+    // part and offers the segment choice in its log form.
+    assert!(body.contains("Cadenza"), "segment label on the plan");
+    assert!(body.contains("segment_id"), "segment select on the card");
+    assert!(body.contains("Roma") && body.contains("Napoli"));
+}
