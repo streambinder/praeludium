@@ -51,9 +51,12 @@ pub struct MockItem {
     pub title: String,
     #[serde(rename = "Movement")]
     pub movement: String,
-    /// The excerpt this audition asks for.
-    #[serde(rename = "Excerpt")]
-    pub excerpt: String,
+    /// The extract labels this audition asks for.
+    #[serde(rename = "SegmentLabels")]
+    pub segment_labels: Vec<String>,
+    /// The note of the link between the piece and the audition.
+    #[serde(rename = "LinkNote")]
+    pub link_note: String,
 }
 
 impl App {
@@ -78,7 +81,7 @@ impl App {
             )?;
             let mut stmt = db.prepare(
                 "SELECT mi.id, mi.mock_id, mi.piece_id, mi.position, mi.confidence, mi.note,
-				p.composer, p.work, p.movement, COALESCE(pc.excerpt, '')
+				p.composer, p.work, p.movement, COALESCE(pc.note, '')
 				FROM mock_items mi
 				JOIN pieces p ON p.id = mi.piece_id
 				LEFT JOIN piece_audition pc ON pc.piece_id = mi.piece_id AND pc.audition_id = ?
@@ -97,13 +100,25 @@ impl App {
                         note: row.get(5)?,
                         title: format!("{composer} — {work}"),
                         movement: row.get(8)?,
-                        excerpt: row.get(9)?,
+                        segment_labels: Vec::new(),
+                        link_note: row.get(9)?,
                     })
                 })?
                 .collect::<Result<Vec<_>>>()?;
             m.items = items.clone();
             (m, items)
         };
+        let mut items = items;
+        for it in &mut items {
+            let by_id: std::collections::HashMap<i64, String> = self
+                .segments_for_piece(it.piece_id)?
+                .into_iter()
+                .map(|s| (s.id, s.label))
+                .collect();
+            let ids = self.link_segment_ids(it.piece_id, mock.audition_id)?;
+            it.segment_labels = ids.iter().filter_map(|id| by_id.get(id).cloned()).collect();
+        }
+        mock.items = items.clone();
         let mut sum = 0i64;
         for it in &items {
             if it.confidence > 0 {

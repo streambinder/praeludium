@@ -534,7 +534,7 @@ async fn piece_edit_archive_and_filters() {
         .clone()
         .oneshot(form_req(
             "/pieces/1/edit",
-            "composer=Bach&work=Suite+II&movement=Preludio&kind=excerpt&difficulty=4&target_bpm=72&audition=1&excerpt-1=da+capo&round-1=1",
+            "composer=Bach&work=Suite+II&movement=Preludio&kind=excerpt&difficulty=4&target_bpm=72&audition=1&note-1=da+capo&round-1=1",
         ))
         .await
         .unwrap();
@@ -1174,4 +1174,99 @@ async fn today_plan_renders_segmented_items() {
     assert!(body.contains("Cadenza"), "segment label on the plan");
     assert!(body.contains("segment_id"), "segment select on the card");
     assert!(body.contains("Roma") && body.contains("Napoli"));
+}
+
+#[tokio::test]
+async fn link_note_round_trip() {
+    let (r, app) = test_app();
+    r.clone()
+        .oneshot(form_req("/auditions", "name=Roma&date=2026-12-06&weight=4"))
+        .await
+        .unwrap();
+    // Add the piece with a note on the link.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Haydn&work=Concerto&kind=solo&difficulty=3&audition=1&note-1=ed.+Schott",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert_eq!(app.piece_auditions(1).unwrap()[0].note, "ed. Schott");
+    // The edit form carries the note and no requirement text input.
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/pieces/1/edit"))
+        .await
+        .unwrap();
+    let body = body_string(resp).await;
+    assert!(body.contains("name=\"note-1\""), "note input on the form");
+    assert!(body.contains("ed. Schott"), "note value on the form");
+    assert!(
+        !body.contains("name=\"excerpt-1\""),
+        "no requirement text input"
+    );
+    // An unrelated edit that carries the note keeps it.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/pieces/1/edit",
+            "composer=Haydn&work=Concerto&movement=I+mov.&kind=solo&difficulty=3&audition=1&note-1=ed.+Schott",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert_eq!(app.piece_auditions(1).unwrap()[0].note, "ed. Schott");
+    // The audition page and the piece page render the note as a note.
+    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
+    assert!(
+        body_string(resp).await.contains("Note: ed. Schott"),
+        "note on the audition page"
+    );
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/diary/piece/1"))
+        .await
+        .unwrap();
+    assert!(
+        body_string(resp).await.contains("Note: ed. Schott"),
+        "note on the piece page"
+    );
+}
+
+#[tokio::test]
+async fn mock_item_shows_extracts_and_note() {
+    let r = test_router();
+    r.clone()
+        .oneshot(form_req("/auditions", "name=Roma&date=2026-12-06&weight=4"))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Haydn&work=Concerto&kind=solo&difficulty=3&audition=1&note-1=con+cadenza&segnew-alias-1=Cadenza&segnew-start-kind-1=bar&segnew-start-value-1=100&segnew-end-kind-1=bar&segnew-end-value-1=130",
+        ))
+        .await
+        .unwrap();
+    let resp = r
+        .clone()
+        .oneshot(form_req("/auditions/1/mock", "count=1"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/auditions/1/mock/1"))
+        .await
+        .unwrap();
+    let body = body_string(resp).await;
+    assert!(
+        body.contains("Excerpts: Cadenza"),
+        "extract labels on the mock item"
+    );
+    assert!(
+        body.contains("Note: con cadenza"),
+        "link note on the mock item"
+    );
 }
