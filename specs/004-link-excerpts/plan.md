@@ -2,21 +2,22 @@
 
 **Branch**: `feat/link-excerpts` | **Date**: 2026-10-27 | **Spec**: `specs/004-link-excerpts/spec.md`
 
-**Input**: Feature specification from `specs/004-link-excerpts/spec.md`, draft for ratification.
+**Input**: Feature specification from `specs/004-link-excerpts/spec.md`, draft for ratification, amended 2026-10-27 after the note decision.
 
 ## Summary
 
-Remove the per-link free-text excerpt from the interface and
-rename the segment concept to excerpt in every user-facing
-string. The forms lose the text input. The audition page, the
-piece page, and the mock runner lose the text line; the mock
-runner shows the extract labels of the link instead. Link
-writes preserve the stored text: the update handler rewrites
-the link rows, so the handler carries the stored value over.
-Locale values under the existing `segment.*` keys carry the
-new name in six locales. A deploy data step sets the
-eliminatory round on the five links whose text names that
-round.
+Remove the per-link free-text excerpt as the requirement
+carrier and rename the segment concept to excerpt in every
+user-facing string. The forms lose the requirement text input
+and gain a note input per link. The audition page, the piece
+page, and the mock runner lose the requirement text line; the
+mock runner shows the extract labels of the link instead. The
+pages render the note of a link when the note exists. Link
+writes store the note that the form carries. Locale values
+under the existing `segment.*` keys carry the new name in six
+locales. A deploy data step redistributes the existing texts:
+the eliminatory round onto five links, the informational
+texts into the notes of their links.
 
 ## Technical Context
 
@@ -27,7 +28,10 @@ in `Cargo.toml`).
 rust-embed. No new dependency.
 
 **Storage**: SQLite through the existing `migrate()` in
-`src/db.rs`. No schema change: the column stays (spec A-2).
+`src/db.rs`. One additive change: a note column on
+`piece_audition`, added through the `add_column` helper. The
+excerpt column leaves every read and write path; no column
+drop runs (spec A-2).
 
 **Testing**: Unit tests beside the modules they cover;
 integration tests in `tests/` for the form and preservation
@@ -73,15 +77,15 @@ specs/004-link-excerpts/
 
 ```text
 templates/
-├── pieces.html          # add form: drop the text input
-├── piece_form.html      # edit form: drop the text input
-├── audition_detail.html # drop the text line
-├── piece_detail.html    # drop the text line
-└── mock_run.html        # labels in place of the text
+├── pieces.html          # add form: note input, no text input
+├── piece_form.html      # edit form: note input, no text input
+├── audition_detail.html # note line, no requirement text line
+├── piece_detail.html    # note line, no requirement text line
+└── mock_run.html        # labels and note in place of the text
 src/
-├── handlers.rs          # form reads, write preservation, mock data
-├── db.rs                # link write carries the stored text
-└── mocks.rs             # mock item carries extract labels
+├── handlers.rs          # form reads and writes, mock data
+├── db.rs                # note column, link write stores the note
+└── mocks.rs             # mock item carries labels and the note
 locales/
 └── *.json               # segment.* values carry the new name
 ```
@@ -91,26 +95,28 @@ locales/
 ### Phase A: Forms and rendering
 
 Remove the `excerpt-<id>` input from `templates/pieces.html`
-and `templates/piece_form.html`. Remove the text line from
+and `templates/piece_form.html`. Add a `note-<id>` input per
+link row in both forms. Remove the requirement text line from
 `templates/audition_detail.html` and `templates/piece_detail.html`.
-The handlers stop reading the form field and stop filling the
-form map for the text. The `Audition.excerpt` value may stay
-populated in the data layer (spec FR-8); no template reads it.
+Render the note of the link in its place, labeled as a note.
+The handlers stop reading and filling the requirement text.
 
-### Phase B: Write preservation
+### Phase B: Note storage and writes
 
-`handle_update_piece` deletes and reinserts the link rows. The
-handler first reads the stored text per linked audition and
-passes the value into the insert. `handle_add_piece` inserts
-an empty text for new links. A test drives an unrelated edit
-and asserts the stored text after the edit.
+Add the note column on `piece_audition` through the migration.
+The link reads return the note beside the scope. The handlers
+read the note from the form and pass the value into the link
+insert. `handle_update_piece` deletes and reinserts the link
+rows, so the form round trip carries the note. A test drives
+an add and an unrelated edit and asserts the stored note after
+each write.
 
 ### Phase C: Mock runner labels
 
-The mock query in `src/mocks.rs` reads the extract labels of
-the item link through the same scope read the piece page uses.
-`MockItem` carries the labels; `templates/mock_run.html`
-renders the labels line in place of the text line.
+The mock query in `src/mocks.rs` reads the extract labels and
+the note of the item link through the same scope read the
+piece page uses. `MockItem` carries both; `templates/mock_run.html`
+renders the labels line and the note in place of the text line.
 
 ### Phase D: Rename in the locales
 
@@ -122,17 +128,22 @@ equivalents.
 
 ### Phase E: Deploy data step
 
-After deploy, set the eliminatory round on the five Opera Roma
-links of the solo pieces through the edit form round select.
-Verify the round on the audition page and the piece page.
-Under variant B of D-1, the step also clears the stored texts
-after the pre-deploy backup check; under variant A the step
-leaves every stored text untouched.
+After the pre-deploy backup, redistribute the existing texts
+through the edit forms. Set the eliminatory round on the five
+Opera Roma links of the solo pieces through the round select.
+Set the note of the 13 informational links to their stored
+text, word for word, through the note input. The range texts
+and the movement repetition texts need no action: the new
+interface never reads them. Verify the rounds and the notes
+on the audition pages and the piece pages (spec SC-5).
 
 ## Risks
 
-- The update handler rewrites link rows on every edit: a
-  missed carry-over would erase stored texts on the first edit
-  after deploy. Phase B and its test gate the risk.
+- The update handler rewrites link rows on every edit: a field
+  that the form round trip misses would reset on the first
+  edit after deploy. Phase B and its test gate the risk.
+- The redistribution touches 18 links by hand through the
+  forms: a wrong value would show at once in the SC-5
+  verification against the pre-change inventory.
 - The mock item struct feeds one template only; the label read
   must reuse the scope definition of cycle 003, not a copy.
