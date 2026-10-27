@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-27
 
-**Status**: Draft (amended 2026-10-27 after the note decision)
+**Status**: Complete (merged 2026-10-27 in PR #44, deployed and verified live the same day; coverage 92.67 percent against the 90 percent gate)
 
 **Input**: User description: "Remove the free-text excerpt field
 shown when a piece is added to an audition, now that the segment

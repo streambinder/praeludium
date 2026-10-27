@@ -49,9 +49,9 @@ specification.
 
 - [x] T010 Run the local gate: format, clippy, unit tests,
       integration tests, coverage at or above 90 percent.
-- [ ] T011 Open the implementation pull request with the gate
+- [x] T011 Open the implementation pull request with the gate
       evidence; the owner merges.
-- [ ] T012 Back up the production database, deploy, and run
+- [x] T012 Back up the production database, deploy, and run
       the deploy data step of plan Phase E; verify the scoped
       links, the migrated rounds, and the notes against the
       pre-change inventory (SC-5).
