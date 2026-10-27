@@ -1488,11 +1488,9 @@ pub fn clamp_difficulty(form: &FormData) -> i64 {
     }
 }
 
-/// The per-link excerpt submitted for an audition checkbox.
-pub fn link_excerpt(form: &FormData, audition_id: i64) -> String {
-    form.get(&format!("excerpt-{audition_id}"))
-        .trim()
-        .to_string()
+/// The per-link note submitted for an audition checkbox.
+pub fn link_note(form: &FormData, audition_id: i64) -> String {
+    form.get(&format!("note-{audition_id}")).trim().to_string()
 }
 
 /// The round chosen for one audition in the piece form. A round
@@ -1608,13 +1606,13 @@ pub async fn handle_add_piece(State(app): State<Shared>, req: axum::extract::Req
         }
     };
     for cid in form.ids("audition") {
-        let excerpt = link_excerpt(&form, cid);
+        let note = link_note(&form, cid);
         let round = link_round(&app, &form, cid);
         {
             let db = app.db.lock().unwrap_or_else(|p| p.into_inner());
             if let Err(e) = db.execute(
-                "INSERT OR IGNORE INTO piece_audition(piece_id, audition_id, excerpt, round_id) VALUES(?,?,?,?)",
-                params![pid, cid, excerpt, round],
+                "INSERT OR IGNORE INTO piece_audition(piece_id, audition_id, note, round_id) VALUES(?,?,?,?)",
+                params![pid, cid, note, round],
             ) {
                 return err500(&e);
             }
@@ -1698,8 +1696,8 @@ pub struct PieceFormData {
     pub auditions: Vec<Audition>,
     #[serde(rename = "Selected")]
     pub selected: HashMap<String, bool>,
-    #[serde(rename = "Excerpt")]
-    pub excerpt: HashMap<String, String>,
+    #[serde(rename = "Note")]
+    pub note: HashMap<String, String>,
     #[serde(rename = "Rounds")]
     pub rounds: HashMap<String, Vec<crate::db::Round>>,
     #[serde(rename = "SelRound")]
@@ -1725,11 +1723,11 @@ pub async fn handle_edit_piece(
         Err(e) => return err500(&e),
     };
     let mut selected = HashMap::new();
-    let mut excerpts = HashMap::new();
+    let mut notes = HashMap::new();
     let mut sel_round = HashMap::new();
     for c in &p.auditions {
         selected.insert(c.id.to_string(), true);
-        excerpts.insert(c.id.to_string(), c.excerpt.clone());
+        notes.insert(c.id.to_string(), c.note.clone());
         if let Some(round) = c.round_id {
             sel_round.insert(c.id.to_string(), round);
         }
@@ -1769,7 +1767,7 @@ pub async fn handle_edit_piece(
             piece: p,
             auditions,
             selected,
-            excerpt: excerpts,
+            note: notes,
             rounds,
             sel_round,
             segments,
@@ -1866,8 +1864,8 @@ pub async fn handle_update_piece(
         }
         for cid in &audition_ids {
             if let Err(e) = db.execute(
-                "INSERT INTO piece_audition(piece_id, audition_id, excerpt, round_id) VALUES(?,?,?,?)",
-                params![id, cid, link_excerpt(&form, *cid), link_rounds[cid]],
+                "INSERT INTO piece_audition(piece_id, audition_id, note, round_id) VALUES(?,?,?,?)",
+                params![id, cid, link_note(&form, *cid), link_rounds[cid]],
             ) {
                 return err500(&e);
             }
@@ -4431,9 +4429,9 @@ mod tests {
         assert_eq!(clamp_difficulty(&form), 3);
         let form = FormData::query_only("difficulty=x");
         assert_eq!(clamp_difficulty(&form), 1);
-        let form = FormData::query_only("excerpt-4=  Bach  ");
-        assert_eq!(link_excerpt(&form, 4), "Bach");
-        assert_eq!(link_excerpt(&form, 9), "");
+        let form = FormData::query_only("note-4=  Bach  ");
+        assert_eq!(link_note(&form, 4), "Bach");
+        assert_eq!(link_note(&form, 9), "");
         let form = FormData::query_only("target_bpm=");
         assert_eq!(form_target_bpm(&form), None);
         let form = FormData::query_only("target_bpm=10");

@@ -49,9 +49,9 @@ pub struct Audition {
     pub weight: i64,
     #[serde(rename = "Archived")]
     pub archived: bool,
-    /// Per-link excerpt, set only when read through piece_audition.
-    #[serde(rename = "Excerpt")]
-    pub excerpt: String,
+    /// Per-link note, set only when read through piece_audition.
+    #[serde(rename = "Note")]
+    pub note: String,
     /// Per-link round, set only when read through piece_audition.
     #[serde(rename = "RoundID", serialize_with = "ser_null_i64")]
     pub round_id: Option<i64>,
@@ -368,6 +368,13 @@ fn migrate(db: &Connection) -> Result<()> {
     // piece_audition.excerpt holds the excerpt each audition asks
     // for; the column started out as notes and is renamed when present.
     ensure_link_excerpt(db)?;
+    // piece_audition.note holds the free information of a link;
+    // the requirement of a link lives in its segment scope alone.
+    add_column(
+        db,
+        "ALTER TABLE piece_audition ADD COLUMN note TEXT NOT NULL DEFAULT ''",
+        "note",
+    )?;
     // piece_audition.round_id names the round a linked piece belongs
     // to; NULL means the piece is asked in every round.
     add_column(
@@ -514,7 +521,7 @@ impl App {
     pub fn piece_auditions(&self, piece_id: i64) -> Result<Vec<Audition>> {
         let db = self.conn();
         let mut stmt = db.prepare(
-            "SELECT c.id, c.name, c.audition_date, c.weight, c.archived_at IS NOT NULL, pc.excerpt,
+            "SELECT c.id, c.name, c.audition_date, c.weight, c.archived_at IS NOT NULL, pc.note,
 			pc.round_id, COALESCE(rd.name, '')
 			FROM auditions c JOIN piece_audition pc ON pc.audition_id=c.id
 			LEFT JOIN audition_rounds rd ON rd.id = pc.round_id
@@ -528,7 +535,7 @@ impl App {
                     date: row.get(2)?,
                     weight: row.get(3)?,
                     archived: row.get::<_, i64>(4)? != 0,
-                    excerpt: row.get(5)?,
+                    note: row.get(5)?,
                     round_id: row.get(6)?,
                     round_name: row.get(7)?,
                     ..Default::default()
@@ -801,7 +808,7 @@ impl App {
             let like = format!("%{}%", query.to_lowercase());
             where_clause += " AND (LOWER(p.composer) LIKE ? OR LOWER(p.work) LIKE ? OR LOWER(p.movement) LIKE ? OR LOWER(p.kind) LIKE ?
 				OR EXISTS (SELECT 1 FROM piece_audition pcq JOIN auditions cq ON cq.id = pcq.audition_id
-					WHERE pcq.piece_id = p.id AND (LOWER(cq.name) LIKE ? OR LOWER(pcq.excerpt) LIKE ?)))";
+					WHERE pcq.piece_id = p.id AND (LOWER(cq.name) LIKE ? OR LOWER(pcq.note) LIKE ?)))";
             for _ in 0..6 {
                 args.push(rusqlite::types::Value::Text(like.clone()));
             }

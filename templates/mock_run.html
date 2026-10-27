@@ -10,7 +10,8 @@
 <section class="panel reveal">
 <div class="section-head"><h2>{{ Current.Title }}</h2></div>
 {% if Current.Movement %}<p class="meta">{{ Current.Movement }}</p>{% endif %}
-{% if Current.Excerpt %}<p>{{ Current.Excerpt }}</p>{% endif %}
+{% if Current.SegmentLabels %}<p class="meta">{{ t("segment.parts") }}: {{ Current.SegmentLabels | join(", ") }}</p>{% endif %}
+{% if Current.LinkNote %}<p class="meta">{{ t("field.note") }}: {{ Current.LinkNote }}</p>{% endif %}
 {% if Mock.RecordTake %}{% include "recorder.html" %}{% endif %}
 <form method="post" action="/auditions/{{ Audition.ID }}/mock/{{ Mock.ID }}/rate" class="mock-rate">
 <input type="hidden" name="item_id" value="{{ Current.ID }}">
