@@ -149,6 +149,9 @@
   "piece.today_score": "Score d'aujourd'hui",
   "pieces.add_title": "Ajouter un morceau",
   "pieces.archived_badge": "archivé",
+  "pager.next": "Suivant",
+  "pager.page": "Page %d sur %d",
+  "pager.prev": "Précédent",
   "pieces.count": {
     "one": "%d morceau",
     "other": "%d morceaux"

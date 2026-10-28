@@ -597,6 +597,13 @@ h2 {
   margin-top: 0.45rem;
 }
 
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
