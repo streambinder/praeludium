@@ -2529,7 +2529,7 @@ pub fn audition_filter_href(sel: &HashSet<i64>) -> String {
 }
 
 /// Days shown on one page of the /diary days list.
-pub const DIARY_DAYS_PER_PAGE: i64 = 30;
+pub const DIARY_DAYS_PER_PAGE: i64 = 10;
 
 /// Render a /diary URL for one page of the days list. The
 /// selection rides along; page 1 keeps the plain URL of the

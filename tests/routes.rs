@@ -1285,7 +1285,7 @@ async fn diary_days_pagination() {
         ))
         .await
         .unwrap();
-    // 35 practiced days: page 1 holds 30, page 2 the rest.
+    // 35 practiced days: three full pages of 10 and a final page of 5.
     for d in 1..=31 {
         seed_session(&app, &format!("2026-08-{d:02}"), 1, 30, 3, "");
     }
@@ -1294,12 +1294,12 @@ async fn diary_days_pagination() {
     }
     let resp = r.clone().oneshot(req("GET", "/diary")).await.unwrap();
     let body = body_string(resp).await;
-    assert_eq!(body.matches("/diary/day/").count(), 30, "page 1 day cards");
+    assert_eq!(body.matches("/diary/day/").count(), 10, "page 1 day cards");
     assert!(
         body.contains("href=\"&#x2f;diary?page=2\">Next</a>"),
         "next href on page 1"
     );
-    assert!(body.contains("Page 1 of 2"), "page label on page 1");
+    assert!(body.contains("Page 1 of 4"), "page label on page 1");
     assert!(
         !body.contains("/diary/day/2026-08-01"),
         "oldest day not on page 1"
@@ -1311,24 +1311,41 @@ async fn diary_days_pagination() {
         body.contains("href=\"&#x2f;diary?c=1&amp;page=2\">Next</a>"),
         "filtered next href"
     );
-    // Page 2: the remaining 5 days, prev back to the plain URL.
+    // Page 2: another full page, prev back to the plain URL.
     let resp = r
         .clone()
         .oneshot(req("GET", "/diary?page=2"))
         .await
         .unwrap();
     let body = body_string(resp).await;
-    assert_eq!(body.matches("/diary/day/").count(), 5, "page 2 day cards");
-    assert!(
-        body.contains("/diary/day/2026-08-01"),
-        "oldest day on page 2"
-    );
+    assert_eq!(body.matches("/diary/day/").count(), 10, "page 2 day cards");
     assert!(
         body.contains("href=\"&#x2f;diary\">Previous</a>"),
         "prev href on page 2"
     );
+    assert!(
+        body.contains("href=\"&#x2f;diary?page=3\">Next</a>"),
+        "next href on page 2"
+    );
+    assert!(body.contains("Page 2 of 4"), "page label on page 2");
+    // Page 4: the remaining 5 days, including the oldest day.
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/diary?page=4"))
+        .await
+        .unwrap();
+    let body = body_string(resp).await;
+    assert_eq!(body.matches("/diary/day/").count(), 5, "page 4 day cards");
+    assert!(
+        body.contains("/diary/day/2026-08-01"),
+        "oldest day on page 4"
+    );
+    assert!(
+        body.contains("href=\"&#x2f;diary?page=3\">Previous</a>"),
+        "prev href on page 4"
+    );
     assert!(!body.contains("Next</a>"), "no next on the last page");
-    assert!(body.contains("Page 2 of 2"), "page label on page 2");
+    assert!(body.contains("Page 4 of 4"), "page label on page 4");
     // Out-of-range pages clamp: 99 to the last, 0 to the first.
     let resp = r
         .clone()
@@ -1349,7 +1366,7 @@ async fn diary_days_pagination() {
     let body = body_string(resp).await;
     assert_eq!(
         body.matches("/diary/day/").count(),
-        30,
+        10,
         "page 0 clamps to first"
     );
 }
