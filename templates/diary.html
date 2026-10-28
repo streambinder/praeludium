@@ -124,4 +124,11 @@
 <p class="empty">{{ t("diary.no_days") }}</p>
 {% endfor %}
 </div>
+{% if HasPager %}
+<nav class="pager">
+{% if PrevHref %}<a class="btn secondary" href="{{ PrevHref }}">{{ t("pager.prev") }}</a>{% endif %}
+<span class="meta">{{ t("pager.page", Page, Pages) }}</span>
+{% if NextHref %}<a class="btn secondary" href="{{ NextHref }}">{{ t("pager.next") }}</a>{% endif %}
+</nav>
+{% endif %}
 {% endblock %}

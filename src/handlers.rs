@@ -2528,28 +2528,71 @@ pub fn audition_filter_href(sel: &HashSet<i64>) -> String {
     format!("/diary?c={}", parts.join(","))
 }
 
+/// Days shown on one page of the /diary days list.
+pub const DIARY_DAYS_PER_PAGE: i64 = 30;
+
+/// Render a /diary URL for one page of the days list. The
+/// selection rides along; page 1 keeps the plain URL of the
+/// selection.
+pub fn diary_page_href(sel: &HashSet<i64>, page: i64) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if !sel.is_empty() {
+        let mut ids: Vec<i64> = sel.iter().copied().collect();
+        ids.sort();
+        let joined: Vec<String> = ids.iter().map(|id| id.to_string()).collect();
+        parts.push(format!("c={}", joined.join(",")));
+    }
+    if page > 1 {
+        parts.push(format!("page={page}"));
+    }
+    if parts.is_empty() {
+        "/diary".to_string()
+    } else {
+        format!("/diary?{}", parts.join("&"))
+    }
+}
+
 pub async fn handle_diary(
     State(app): State<Shared>,
     headers: HeaderMap,
     uri: axum::http::Uri,
 ) -> Response {
     let lang = req_lang(&headers);
+    let query = uri.query().unwrap_or("");
+    let form = FormData::query_only(query);
+    let wanted_page = form.get("page").parse::<i64>().unwrap_or(1).max(1);
+    let total_days: i64 = {
+        let db = app.db.lock().unwrap_or_else(|p| p.into_inner());
+        match db.query_row(
+            "SELECT COUNT(*) FROM (SELECT date FROM sessions GROUP BY date HAVING MAX(minutes) > 0)",
+            [],
+            |row| row.get(0),
+        ) {
+            Ok(v) => v,
+            Err(e) => return err500(&e),
+        }
+    };
+    let total_pages = ((total_days + DIARY_DAYS_PER_PAGE - 1) / DIARY_DAYS_PER_PAGE).max(1);
+    let page = wanted_page.min(total_pages);
     let days = {
         let db = app.db.lock().unwrap_or_else(|p| p.into_inner());
         let prepared = db.prepare(
             "SELECT date, COALESCE(SUM(minutes),0),
 			COUNT(DISTINCT CASE WHEN minutes > 0 THEN piece_id END)
-			FROM sessions GROUP BY date HAVING MAX(minutes) > 0 ORDER BY date DESC",
+			FROM sessions GROUP BY date HAVING MAX(minutes) > 0 ORDER BY date DESC LIMIT ? OFFSET ?",
         );
         match prepared {
             Ok(mut stmt) => match stmt
-                .query_map([], |row| {
-                    Ok(DayRow {
-                        date: row.get(0)?,
-                        minutes: row.get(1)?,
-                        pieces: row.get(2)?,
-                    })
-                })
+                .query_map(
+                    rusqlite::params![DIARY_DAYS_PER_PAGE, (page - 1) * DIARY_DAYS_PER_PAGE],
+                    |row| {
+                        Ok(DayRow {
+                            date: row.get(0)?,
+                            minutes: row.get(1)?,
+                            pieces: row.get(2)?,
+                        })
+                    },
+                )
                 .and_then(|rows| rows.collect::<DbResult<Vec<_>>>())
             {
                 Ok(v) => v,
@@ -2562,8 +2605,6 @@ pub async fn handle_diary(
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
-    let query = uri.query().unwrap_or("");
-    let form = FormData::query_only(query);
     let sel = parse_audition_filter(form.get("c"));
     let mut valid: HashSet<i64> = HashSet::new();
     for c in &auditions {
@@ -2606,10 +2647,25 @@ pub async fn handle_diary(
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
+    let prev_href = if page > 1 {
+        diary_page_href(&valid, page - 1)
+    } else {
+        String::new()
+    };
+    let next_href = if page < total_pages {
+        diary_page_href(&valid, page + 1)
+    } else {
+        String::new()
+    };
     let data = serde_json::json!({
         "Title": tr(&lang, "nav.diary", &[]),
         "Nav": "diary",
         "Days": days,
+        "Page": page,
+        "Pages": total_pages,
+        "HasPager": total_pages > 1,
+        "PrevHref": prev_href,
+        "NextHref": next_href,
         "PrepMap": prep,
         "PrepMapMobile": prep_mobile,
         "Chips": chips,
@@ -4315,6 +4371,16 @@ mod tests {
         assert_eq!(sel.len(), 2);
         assert_eq!(audition_filter_href(&sel), "/diary?c=1,3");
         assert_eq!(audition_filter_href(&HashSet::new()), "/diary");
+    }
+
+    #[test]
+    fn diary_page_href_keeps_selection() {
+        let empty: HashSet<i64> = HashSet::new();
+        assert_eq!(diary_page_href(&empty, 1), "/diary");
+        assert_eq!(diary_page_href(&empty, 2), "/diary?page=2");
+        let sel = parse_audition_filter("3,1");
+        assert_eq!(diary_page_href(&sel, 1), "/diary?c=1,3");
+        assert_eq!(diary_page_href(&sel, 2), "/diary?c=1,3&page=2");
     }
 
     // ---------- coverage batch: helpers ----------

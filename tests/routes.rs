@@ -1270,3 +1270,86 @@ async fn mock_item_shows_extracts_and_note() {
         "link note on the mock item"
     );
 }
+
+#[tokio::test]
+async fn diary_days_pagination() {
+    let (r, app) = test_app();
+    r.clone()
+        .oneshot(form_req("/auditions", "name=Roma&date=2026-12-06&weight=4"))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Bach&work=Suite&kind=solo&difficulty=3&audition=1",
+        ))
+        .await
+        .unwrap();
+    // 35 practiced days: page 1 holds 30, page 2 the rest.
+    for d in 1..=31 {
+        seed_session(&app, &format!("2026-08-{d:02}"), 1, 30, 3, "");
+    }
+    for d in 1..=4 {
+        seed_session(&app, &format!("2026-09-{d:02}"), 1, 30, 3, "");
+    }
+    let resp = r.clone().oneshot(req("GET", "/diary")).await.unwrap();
+    let body = body_string(resp).await;
+    assert_eq!(body.matches("/diary/day/").count(), 30, "page 1 day cards");
+    assert!(
+        body.contains("href=\"&#x2f;diary?page=2\">Next</a>"),
+        "next href on page 1"
+    );
+    assert!(body.contains("Page 1 of 2"), "page label on page 1");
+    assert!(
+        !body.contains("/diary/day/2026-08-01"),
+        "oldest day not on page 1"
+    );
+    // The audition selection rides along in the pager hrefs.
+    let resp = r.clone().oneshot(req("GET", "/diary?c=1")).await.unwrap();
+    let body = body_string(resp).await;
+    assert!(
+        body.contains("href=\"&#x2f;diary?c=1&amp;page=2\">Next</a>"),
+        "filtered next href"
+    );
+    // Page 2: the remaining 5 days, prev back to the plain URL.
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/diary?page=2"))
+        .await
+        .unwrap();
+    let body = body_string(resp).await;
+    assert_eq!(body.matches("/diary/day/").count(), 5, "page 2 day cards");
+    assert!(
+        body.contains("/diary/day/2026-08-01"),
+        "oldest day on page 2"
+    );
+    assert!(
+        body.contains("href=\"&#x2f;diary\">Previous</a>"),
+        "prev href on page 2"
+    );
+    assert!(!body.contains("Next</a>"), "no next on the last page");
+    assert!(body.contains("Page 2 of 2"), "page label on page 2");
+    // Out-of-range pages clamp: 99 to the last, 0 to the first.
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/diary?page=99"))
+        .await
+        .unwrap();
+    let body = body_string(resp).await;
+    assert_eq!(
+        body.matches("/diary/day/").count(),
+        5,
+        "clamped to last page"
+    );
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/diary?page=0"))
+        .await
+        .unwrap();
+    let body = body_string(resp).await;
+    assert_eq!(
+        body.matches("/diary/day/").count(),
+        30,
+        "page 0 clamps to first"
+    );
+}

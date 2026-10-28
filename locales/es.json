@@ -149,6 +149,9 @@
   "piece.today_score": "Puntuación de hoy",
   "pieces.add_title": "Añadir una pieza",
   "pieces.archived_badge": "archivada",
+  "pager.next": "Siguiente",
+  "pager.page": "Página %d de %d",
+  "pager.prev": "Anterior",
   "pieces.count": {
     "one": "%d pieza",
     "other": "%d piezas"

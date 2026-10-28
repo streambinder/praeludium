@@ -149,6 +149,9 @@
   "piece.today_score": "Today's score",
   "pieces.add_title": "Add a piece",
   "pieces.archived_badge": "archived",
+  "pager.next": "Next",
+  "pager.page": "Page %d of %d",
+  "pager.prev": "Previous",
   "pieces.count": {
     "one": "%d piece",
     "other": "%d pieces"
