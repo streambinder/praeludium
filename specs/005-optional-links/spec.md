@@ -7,7 +7,7 @@
 **Amended**: 2026-10-29 (pool semantics, translations chosen,
 Piatti link corrected to piece 34)
 
-**Status**: Draft (awaiting ratification)
+**Status**: Complete (merged 2026-10-29 in PR #50, deployed and verified live the same day; data step T013 verified live the same day; coverage 92.54 percent against the 90 percent gate)
 
 **Input**: User description: "Fai una PR per aggiungere il marker
 'a scelta' / optional su un brano quando aggiunto a un concorso.
