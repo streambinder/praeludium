@@ -114,6 +114,13 @@ without further sources.
 - A commit body holds one sentence of at most 100 characters and
   ends with a period. The body states why, not what.
 - One logical change makes one commit.
+- A pull request holds one commit or more. One commit stays
+  the preference.
+- Each file a pull request changes appears in exactly one
+  commit of the pull request.
+- A specification pull request holds one commit.
+- An implementation pull request holds one commit per plan
+  phase. A small change holds one commit.
 - A fix for a red feature branch amends the failing commit. The
   push uses force with an explicit lease that names the remote
   commit. Nobody amends or force-pushes the default branch.
@@ -141,4 +148,4 @@ review checks compliance with this constitution. A rule that proves
 wrong is amended through a recorded decision; the rule is never
 silently ignored.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-20
+**Version**: 1.1.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-29
