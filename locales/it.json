@@ -103,6 +103,7 @@
   "kind.solo": "solo",
   "kind.solo_long": "solistico",
   "kind.solos_plural": "solistici",
+  "link.optional": "A scelta",
   "mock.count": "Estratti",
   "mock.delete": "Elimina simulata",
   "mock.done": "Simulata completata",

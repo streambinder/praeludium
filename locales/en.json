@@ -103,6 +103,7 @@
   "kind.solo": "solo",
   "kind.solo_long": "solo piece",
   "kind.solos_plural": "solo pieces",
+  "link.optional": "Optional",
   "mock.count": "Excerpts",
   "mock.delete": "Delete mock",
   "mock.done": "Mock complete",

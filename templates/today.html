@@ -161,10 +161,10 @@ var SEGMENT_WHOLE = {{ t("segment.whole") | tojson | safe }};
 <span class="plan-rank" aria-hidden="true"></span>
 <span class="prep-pin pin-corner" tabindex="0" aria-label="{{ t("prep.label", pct(it.Piece.Prep)) }}"><span class="prep-dot lv{{ it.Piece.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(it.Piece.Prep)) }}</span></span>
 <div class="card-head">
-<strong><a class="card-link" href="/diary/piece/{{ it.Piece.ID }}">{{ it.Piece.Composer }} — {{ it.Piece.Work }}</a></strong>
+{% if it.Pool %}<strong>{% for m in it.Pool %}{% if not loop.first %} · {% endif %}<a class="card-link" href="/diary/piece/{{ m.ID }}">{{ m.Composer }} — {{ m.Work }}</a>{% endfor %}</strong>{% else %}<strong><a class="card-link" href="/diary/piece/{{ it.Piece.ID }}">{{ it.Piece.Composer }} — {{ it.Piece.Work }}</a></strong>{% endif %}
 {% if it.Logged %}<span class="badge done">✓ {{ dur(it.Logged) }}</span>{% endif %}
 </div>
-<div class="meta movement-row"><span class="badge kind">{{ kindLabel(it.Piece.Kind) }}</span>{% if it.Piece.Movement %}<span>{{ it.Piece.Movement }}</span>{% endif %}</div>
+{% if it.Pool %}<div class="meta movement-row"><span class="badge">{{ t("link.optional") }}</span></div>{% else %}<div class="meta movement-row"><span class="badge kind">{{ kindLabel(it.Piece.Kind) }}</span>{% if it.Piece.Movement %}<span>{{ it.Piece.Movement }}</span>{% endif %}</div>{% endif %}
 {% if it.Segments %}<div class="meta">{{ t("segment.parts") }}: {% for seg in it.Segments %}{% if not loop.first %}, {% endif %}{{ seg.Label }}{% endfor %}</div>{% endif %}
 {% if it.Upcoming %}<div class="chips">{% for c in it.Upcoming %}<span class="chip">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}</div>{% endif %}
 <div class="slot">{{ t("today.suggested", dur(it.Minutes)) }}</div>
@@ -183,8 +183,9 @@ var SEGMENT_WHOLE = {{ t("segment.whole") | tojson | safe }};
 </div>
 </details>
 <form method="post" class="checkin">
-<input type="hidden" name="piece_id" value="{{ it.Piece.ID }}">
-<div class="timer" data-piece="{{ it.Piece.ID }}" data-day="{{ Date }}" data-suggested="{{ it.Minutes }}">
+{% if it.Pool %}<label>{{ t("today.piece") }} <select name="piece_id" required>{% for m in it.Pool %}<option value="{{ m.ID }}">{{ m.Composer }} — {{ m.Work }}{% if m.Movement %} ({{ m.Movement }}){% endif %}</option>{% endfor %}</select></label>
+<div class="timer" data-manual="1" data-piece="{{ it.Piece.ID }}" data-day="{{ Date }}" data-suggested="{{ it.Minutes }}">{% else %}<input type="hidden" name="piece_id" value="{{ it.Piece.ID }}">
+<div class="timer" data-piece="{{ it.Piece.ID }}" data-day="{{ Date }}" data-suggested="{{ it.Minutes }}">{% endif %}
 <span class="timer-display">0:00</span>
 <button type="button" class="secondary timer-toggle">{{ t("timer.start") }}</button>
 <button type="button" class="secondary timer-done" hidden>{{ t("timer.use") }}</button>
@@ -194,7 +195,7 @@ var SEGMENT_WHOLE = {{ t("segment.whole") | tojson | safe }};
 <label>{{ t("field.security") }} <input type="range" name="confidence" min="1" max="5" step="1" value="{{ f0(it.Conf) }}" oninput="this.nextElementSibling.textContent=this.value+'/5'"> <output>{{ f0(it.Conf) }}/5</output></label>
 </div>
 <label>{{ t("field.metronome") }} <input type="number" name="bpm" min="1" max="400" placeholder="{{ t("field.optional") }}"></label>
-{% if it.Segments %}<label>{{ t("segment.field") }} <select name="segment_id"><option value="">{{ t("segment.whole") }}</option>{% for seg in it.Segments %}<option value="{{ seg.ID }}">{{ seg.Label }}</option>{% endfor %}</select></label>
+{% if it.Segments and not it.Pool %}<label>{{ t("segment.field") }} <select name="segment_id"><option value="">{{ t("segment.whole") }}</option>{% for seg in it.Segments %}<option value="{{ seg.ID }}">{{ seg.Label }}</option>{% endfor %}</select></label>
 {% endif %}<label>{{ t("field.note") }} <input type="text" name="note" placeholder="{{ t("today.note_ph") }}"></label>
 <div class="row btns">
 <button type="submit" formaction="/session">{{ t("today.log") }}</button>
@@ -215,9 +216,9 @@ var SEGMENT_WHOLE = {{ t("segment.whole") | tojson | safe }};
 <article class="card plan-card done-card reveal">
 <span class="badge done done-corner">✓ {{ dur(it.Logged) }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(it.Piece.Prep)) }}"><span class="prep-dot lv{{ it.Piece.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(it.Piece.Prep)) }}</span></span></span>
 <div class="card-head">
-<strong><a class="card-link" href="/diary/piece/{{ it.Piece.ID }}">{{ it.Piece.Composer }} — {{ it.Piece.Work }}</a></strong>
+{% if it.Pool %}<strong>{% for m in it.Pool %}{% if not loop.first %} · {% endif %}<a class="card-link" href="/diary/piece/{{ m.ID }}">{{ m.Composer }} — {{ m.Work }}</a>{% endfor %}</strong>{% else %}<strong><a class="card-link" href="/diary/piece/{{ it.Piece.ID }}">{{ it.Piece.Composer }} — {{ it.Piece.Work }}</a></strong>{% endif %}
 </div>
-<div class="meta movement-row"><span class="badge kind">{{ kindLabel(it.Piece.Kind) }}</span>{% for c in it.Upcoming %}<span class="chip">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}</div>
+{% if it.Pool %}<div class="meta movement-row"><span class="badge">{{ t("link.optional") }}</span>{% for c in it.Upcoming %}<span class="chip">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}</div>{% else %}<div class="meta movement-row"><span class="badge kind">{{ kindLabel(it.Piece.Kind) }}</span>{% for c in it.Upcoming %}<span class="chip">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}</div>{% endif %}
 {% if it.Segments %}<div class="meta">{{ t("segment.parts") }}: {% for seg in it.Segments %}{% if not loop.first %}, {% endif %}{{ seg.Label }}{% endfor %}</div>{% endif %}
 </article>
 {% endif %}{% endfor %}

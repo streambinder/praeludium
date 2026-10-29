@@ -324,6 +324,11 @@ pub struct PlanItem {
     /// piece. Upcoming holds only the auditions of this scope.
     #[serde(rename = "Segments")]
     pub segments: Vec<crate::db::Segment>,
+    /// Pool members for a pool card, empty for a single piece:
+    /// non-empty only when every member is pool-only and the
+    /// pool counts two or more members.
+    #[serde(rename = "Pool")]
+    pub pool: Vec<Piece>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -490,6 +495,7 @@ impl App {
             minutes: 0,
             logged: mark.logged,
             segments: Vec::new(),
+            pool: Vec::new(),
         }))
     }
 
@@ -498,14 +504,21 @@ impl App {
     /// the piece merge into one item whose destinations they
     /// are; every scoring input reads only the sessions that
     /// count toward the scope. An explicit skip marker names
-    /// the whole piece and suppresses every scope.
+    /// the whole piece and suppresses every scope. Auditions
+    /// listed in `exclude` as (audition, round) pairs are left
+    /// out: the plan covers them through their pool card.
     pub fn score_piece_scopes(
         &self,
         p: &Piece,
         today: &str,
         coeffs: Coeffs,
+        exclude: &[(i64, Option<i64>)],
     ) -> DbResult<Vec<PlanItem>> {
         let (upcoming, _, _) = upcoming_auditions(p, today)?;
+        let upcoming: Vec<Audition> = upcoming
+            .into_iter()
+            .filter(|c| !exclude.contains(&(c.id, c.round_id)))
+            .collect();
         if upcoming.is_empty() {
             return Ok(Vec::new());
         }
@@ -597,17 +610,177 @@ impl App {
                 minutes: 0,
                 logged,
                 segments,
+                pool: Vec::new(),
             });
         }
         Ok(items)
     }
 
+    /// The qualifying pools of the daily plan: optional links
+    /// that share one audition and one phase, with two or more
+    /// eligible members. A member is eligible when no other
+    /// audition requires it mandatorily and it carries no skip
+    /// marker for today. Members that fail either test keep
+    /// their normal single items.
+    pub fn plan_pools(&self, pieces: &[Piece], today: &str) -> DbResult<Vec<PoolPlan>> {
+        type PoolGroup = ((i64, Option<i64>), Audition, Vec<Piece>);
+        let mut groups: Vec<PoolGroup> = Vec::new();
+        for p in pieces {
+            let (upcoming, _, _) = upcoming_auditions(p, today)?;
+            for c in &upcoming {
+                if !c.optional {
+                    continue;
+                }
+                let key = (c.id, c.round_id);
+                match groups.iter_mut().find(|(k, _, _)| *k == key) {
+                    Some(g) => g.2.push(p.clone()),
+                    None => groups.push((key, c.clone(), vec![p.clone()])),
+                }
+            }
+        }
+        let mut pools = Vec::new();
+        for (key, audition, members) in groups {
+            if members.len() < 2 {
+                continue;
+            }
+            let mut eligible = Vec::new();
+            for m in members {
+                let mandatory_elsewhere = m.auditions.iter().any(|c| !c.optional && c.id != key.0);
+                if mandatory_elsewhere {
+                    continue;
+                }
+                if self.today_mark(m.id, today)?.skipped {
+                    continue;
+                }
+                eligible.push(m);
+            }
+            if eligible.len() >= 2 {
+                pools.push(PoolPlan {
+                    key,
+                    audition,
+                    members: eligible,
+                });
+            }
+        }
+        Ok(pools)
+    }
+
+    /// Score one pool as one plan item. The audition weight
+    /// counts once, however many members the pool holds; the
+    /// days run to the pool audition; confidence, recency,
+    /// practiced, and logged read the union of the member
+    /// sessions that count toward each member's link scope;
+    /// difficulty is the highest member difficulty. The card
+    /// piece is the first member, with the pooled difficulty.
+    pub fn score_pool(&self, pool: &PoolPlan, today: &str, coeffs: Coeffs) -> DbResult<PlanItem> {
+        let days = days_between(today, &pool.audition.date)?;
+        let mut difficulty = 1i64;
+        let mut conf = 2.5f64;
+        let mut rated = false;
+        let mut conf_date = String::new();
+        let mut since = 30i64;
+        let mut since_never = true;
+        let (mut practiced, mut logged) = (false, 0i64);
+        let mut seg_ids: Vec<i64> = Vec::new();
+        for m in &pool.members {
+            difficulty = difficulty.max(m.difficulty);
+            let scope = self.link_segment_ids(m.id, pool.audition.id)?;
+            for id in &scope {
+                if !seg_ids.contains(id) {
+                    seg_ids.push(*id);
+                }
+            }
+            for s in self.prep_sessions(m.id)? {
+                if !crate::segments::counts(s.segment_id, &scope) {
+                    continue;
+                }
+                if (s.confidence > 0 || s.note == "baseline")
+                    && (s.date > conf_date || conf_date.is_empty())
+                {
+                    conf = s.confidence as f64;
+                    rated = true;
+                    conf_date = s.date.clone();
+                }
+                if s.minutes > 0 {
+                    if since_never {
+                        since = days_between(&s.date, today)?.max(0);
+                        since_never = false;
+                    } else {
+                        since = since.min(days_between(&s.date, today)?.max(0));
+                    }
+                    if s.date == today {
+                        practiced = true;
+                    }
+                }
+                if s.date == today {
+                    logged += s.minutes;
+                }
+            }
+        }
+        let br = compute_score(
+            &ScoreInput {
+                weights: vec![pool.audition.weight],
+                days,
+                confidence: conf,
+                since_days: since,
+                difficulty,
+            },
+            coeffs,
+        );
+        let mut segments = Vec::new();
+        for m in &pool.members {
+            for seg in self.segments_for_piece(m.id)? {
+                if seg_ids.contains(&seg.id)
+                    && !segments.iter().any(|s: &crate::db::Segment| s.id == seg.id)
+                {
+                    segments.push(seg);
+                }
+            }
+        }
+        segments.sort_by_key(|s| s.id);
+        let mut piece = pool.members[0].clone();
+        piece.difficulty = difficulty;
+        Ok(PlanItem {
+            piece,
+            upcoming: vec![pool.audition.clone()],
+            base: br.base,
+            days,
+            urgency: br.urgency,
+            need: br.need,
+            recency: br.recency,
+            rest: br.rest,
+            diff: br.diff,
+            score: br.score,
+            conf,
+            conf_rated: rated,
+            since,
+            since_never,
+            practiced,
+            minutes: 0,
+            logged,
+            segments,
+            pool: pool.members.clone(),
+        })
+    }
+
     pub fn build_plan(&self, today: &str) -> DbResult<Vec<PlanItem>> {
         let coeffs = self.get_coeffs()?;
         let pieces = self.list_pieces(0, "", false, "")?;
+        let pools = self.plan_pools(&pieces, today)?;
+        let mut excluded: HashMap<i64, Vec<(i64, Option<i64>)>> = HashMap::new();
+        for pool in &pools {
+            for m in &pool.members {
+                excluded.entry(m.id).or_default().push(pool.key);
+            }
+        }
         let mut items = Vec::new();
         for p in &pieces {
-            items.extend(self.score_piece_scopes(p, today, coeffs)?);
+            let none: Vec<(i64, Option<i64>)> = Vec::new();
+            let excl = excluded.get(&p.id).unwrap_or(&none);
+            items.extend(self.score_piece_scopes(p, today, coeffs, excl)?);
+        }
+        for pool in &pools {
+            items.push(self.score_pool(pool, today, coeffs)?);
         }
         sort_plan_items(&mut items);
         Ok(items)
@@ -950,14 +1123,23 @@ impl App {
             let Some(victim) = items.iter().rposition(|it| !it.practiced) else {
                 break;
             };
-            {
+            // A pool victim drops every member: the slot is one
+            // card, so a later build must not resurrect it with
+            // the members that are left.
+            let mut victim_ids = vec![items[victim].piece.id];
+            for m in &items[victim].pool {
+                if !victim_ids.contains(&m.id) {
+                    victim_ids.push(m.id);
+                }
+            }
+            for pid in victim_ids {
                 let db = self.db.lock().unwrap_or_else(|p| p.into_inner());
                 db.execute(
                     "INSERT INTO sessions(date, piece_id, minutes, confidence, note)
 					SELECT ?,?,0,0,'auto-skipped'
 					WHERE NOT EXISTS (SELECT 1 FROM sessions
 						WHERE date=? AND piece_id=? AND note='auto-skipped')",
-                    params![today, items[victim].piece.id, today, items[victim].piece.id],
+                    params![today, pid, today, pid],
                 )?;
             }
             eprintln!(
@@ -1052,6 +1234,22 @@ impl App {
             data.baseline[i] = tmp[k].clone();
             k += 1;
         }
+        // Pool members carry their own levels: stamp them by id
+        // and write them back onto their pool cards.
+        let mut members: Vec<Piece> = Vec::new();
+        for it in &data.items {
+            members.extend(it.pool.iter().cloned());
+        }
+        if !members.is_empty() {
+            self.stamp_prep_levels(&mut members)?;
+            for it in &mut data.items {
+                for m in &mut it.pool {
+                    if let Some(stamped) = members.iter().find(|s| s.id == m.id) {
+                        *m = stamped.clone();
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1064,7 +1262,14 @@ impl App {
         pieces: &[Piece],
         today: &str,
     ) -> DbResult<HashMap<i64, Piece>> {
-        let in_plan: HashSet<i64> = data.items.iter().map(|it| it.piece.id).collect();
+        // Pool cards stand for every member: a member practiced
+        // outside the plan must not double as an extra done card.
+        let mut in_plan: HashSet<i64> = data.items.iter().map(|it| it.piece.id).collect();
+        for it in &data.items {
+            for m in &it.pool {
+                in_plan.insert(m.id);
+            }
+        }
         let by_id: HashMap<i64, Piece> = pieces.iter().map(|p| (p.id, p.clone())).collect();
         let rows = {
             let db = self.db.lock().unwrap_or_else(|p| p.into_inner());
@@ -1157,6 +1362,15 @@ impl App {
         }
         Ok(())
     }
+}
+
+/// One mutually exclusive pool of the daily plan: the audition
+/// that asks the choice, and the pool-only members that form
+/// its single plan card.
+pub struct PoolPlan {
+    pub key: (i64, Option<i64>),
+    pub audition: Audition,
+    pub members: Vec<Piece>,
 }
 
 /// Order skipped entries: explicit skips first, then by composer
@@ -1516,6 +1730,13 @@ pub fn link_note(form: &FormData, audition_id: i64) -> String {
     form.get(&format!("note-{audition_id}")).trim().to_string()
 }
 
+/// The optional checkbox submitted for an audition checkbox:
+/// checked means the link is one alternative of a candidate
+/// choice; absent means the link stays required.
+pub fn link_optional(form: &FormData, audition_id: i64) -> bool {
+    form.get(&format!("optional-{audition_id}")) == "1"
+}
+
 /// The round chosen for one audition in the piece form. A round
 /// that does not belong to the audition reads as no round.
 pub fn link_round(app: &App, form: &FormData, audition_id: i64) -> Option<i64> {
@@ -1631,11 +1852,12 @@ pub async fn handle_add_piece(State(app): State<Shared>, req: axum::extract::Req
     for cid in form.ids("audition") {
         let note = link_note(&form, cid);
         let round = link_round(&app, &form, cid);
+        let optional = link_optional(&form, cid);
         {
             let db = app.db.lock().unwrap_or_else(|p| p.into_inner());
             if let Err(e) = db.execute(
-                "INSERT OR IGNORE INTO piece_audition(piece_id, audition_id, note, round_id) VALUES(?,?,?,?)",
-                params![pid, cid, note, round],
+                "INSERT OR IGNORE INTO piece_audition(piece_id, audition_id, note, round_id, optional) VALUES(?,?,?,?,?)",
+                params![pid, cid, note, round, optional],
             ) {
                 return err500(&e);
             }
@@ -1725,6 +1947,8 @@ pub struct PieceFormData {
     pub rounds: HashMap<String, Vec<crate::db::Round>>,
     #[serde(rename = "SelRound")]
     pub sel_round: HashMap<String, i64>,
+    #[serde(rename = "Optional")]
+    pub optional: HashMap<String, bool>,
     #[serde(rename = "Segments")]
     pub segments: Vec<crate::db::Segment>,
     #[serde(rename = "SelSegments")]
@@ -1748,11 +1972,15 @@ pub async fn handle_edit_piece(
     let mut selected = HashMap::new();
     let mut notes = HashMap::new();
     let mut sel_round = HashMap::new();
+    let mut optional = HashMap::new();
     for c in &p.auditions {
         selected.insert(c.id.to_string(), true);
         notes.insert(c.id.to_string(), c.note.clone());
         if let Some(round) = c.round_id {
             sel_round.insert(c.id.to_string(), round);
+        }
+        if c.optional {
+            optional.insert(c.id.to_string(), true);
         }
     }
     let mut rounds = HashMap::new();
@@ -1793,6 +2021,7 @@ pub async fn handle_edit_piece(
             note: notes,
             rounds,
             sel_round,
+            optional,
             segments,
             sel_segments,
         },
@@ -1887,8 +2116,14 @@ pub async fn handle_update_piece(
         }
         for cid in &audition_ids {
             if let Err(e) = db.execute(
-                "INSERT INTO piece_audition(piece_id, audition_id, note, round_id) VALUES(?,?,?,?)",
-                params![id, cid, link_note(&form, *cid), link_rounds[cid]],
+                "INSERT INTO piece_audition(piece_id, audition_id, note, round_id, optional) VALUES(?,?,?,?,?)",
+                params![
+                    id,
+                    cid,
+                    link_note(&form, *cid),
+                    link_rounds[cid],
+                    link_optional(&form, *cid)
+                ],
             ) {
                 return err500(&e);
             }
@@ -2263,6 +2498,10 @@ pub struct AuditionDetailData {
     pub links: Vec<crate::db::AuditionLink>,
     #[serde(rename = "Pieces")]
     pub pieces: Vec<Piece>,
+    /// Linked pieces before pool grouping: pool cards count
+    /// their members here, not as one card.
+    #[serde(rename = "PieceCount")]
+    pub piece_count: usize,
     #[serde(rename = "PrepMap")]
     pub prep_map: Vec<crate::prepmap::PrepTile>,
     #[serde(rename = "PrepMapMobile")]
@@ -2292,6 +2531,45 @@ pub async fn handle_audition_detail(
     if let Err(e) = app.stamp_prep_levels(&mut pieces) {
         return err500(&e);
     }
+    // Pool grouping for the piece list: optional links that
+    // share this audition and one phase collapse into one
+    // card, carried by the first member in list order. The
+    // count keeps the linked pieces, not the cards.
+    let piece_count = pieces.len();
+    let audition_id = c.id;
+    let mut pool_groups: HashMap<(i64, Option<i64>), Vec<Piece>> = HashMap::new();
+    for p in &pieces {
+        if let Some(link) = p
+            .auditions
+            .iter()
+            .find(|link| link.id == audition_id && link.optional)
+        {
+            pool_groups
+                .entry((audition_id, link.round_id))
+                .or_default()
+                .push(p.clone());
+        }
+    }
+    let mut emitted: HashSet<(i64, Option<i64>)> = HashSet::new();
+    let mut grouped: Vec<Piece> = Vec::new();
+    for mut p in pieces {
+        if let Some(link) = p
+            .auditions
+            .iter()
+            .find(|link| link.id == audition_id && link.optional)
+        {
+            let key = (audition_id, link.round_id);
+            if pool_groups.get(&key).map(|g| g.len()).unwrap_or(0) >= 2 {
+                if emitted.insert(key) {
+                    p.pool = pool_groups[&key].clone();
+                    grouped.push(p);
+                }
+                continue;
+            }
+        }
+        grouped.push(p);
+    }
+    let pieces = grouped;
     match app.audition_prep_stats() {
         Ok((levels, means)) => {
             c.level = levels.get(&c.id).copied().unwrap_or(0);
@@ -2330,6 +2608,7 @@ pub async fn handle_audition_detail(
             concluded,
             links,
             pieces,
+            piece_count,
             prep_map: prep,
             prep_map_mobile: prep_mobile,
             mocks,
