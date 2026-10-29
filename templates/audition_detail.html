@@ -33,13 +33,13 @@
 <div class="section-head"><h2>{{ t("prepmap.title") }}</h2><span class="meta">{{ tp("prepmap.meta", PrepMap | length) }}</span></div>
 <div class="prepmap desk panel reveal" role="img" aria-label="{{ t("prepmap.aria_audition") }}">
 <div class="ptiles">
-{% for tile in PrepMap %}<a class="ptile lv{{ tile.Level }}{{ tile.Corner }}" style="left:calc({{ cssf(tile.X) }}% + 3px);top:calc({{ cssf(tile.Y) }}% + 3px);width:calc({{ cssf(tile.W) }}% - 6px);height:calc({{ cssf(tile.H) }}% - 6px)" href="/diary/piece/{{ tile.PieceID }}" title="{{ tile.Title }}"><span>{{ tile.Label }}</span></a>
+{% for tile in PrepMap %}<a class="ptile lv{{ tile.Level }}{{ tile.Corner }}" style="left:calc({{ cssf(tile.X) }}% + 3px);top:calc({{ cssf(tile.Y) }}% + 3px);width:calc({{ cssf(tile.W) }}% - 6px);height:calc({{ cssf(tile.H) }}% - 6px)" href="/diary/piece/{{ tile.PieceID }}" title="{{ tile.Title }}"><span>{{ tile.Label }}</span>{% if tile.Optional %}<span class="ptile-badge">{{ t("link.optional") }}</span>{% endif %}</a>
 {% endfor %}
 </div>
 </div>
 <div class="prepmap mob panel reveal" role="img" aria-label="{{ t("prepmap.aria_audition") }}">
 <div class="ptiles">
-{% for tile in PrepMapMobile %}<a class="ptile lv{{ tile.Level }}{{ tile.Corner }}" style="left:calc({{ cssf(tile.X) }}% + 3px);top:calc({{ cssf(tile.Y) }}% + 3px);width:calc({{ cssf(tile.W) }}% - 6px);height:calc({{ cssf(tile.H) }}% - 6px)" href="/diary/piece/{{ tile.PieceID }}" title="{{ tile.Title }}"><span>{{ tile.Label }}</span></a>
+{% for tile in PrepMapMobile %}<a class="ptile lv{{ tile.Level }}{{ tile.Corner }}" style="left:calc({{ cssf(tile.X) }}% + 3px);top:calc({{ cssf(tile.Y) }}% + 3px);width:calc({{ cssf(tile.W) }}% - 6px);height:calc({{ cssf(tile.H) }}% - 6px)" href="/diary/piece/{{ tile.PieceID }}" title="{{ tile.Title }}"><span>{{ tile.Label }}</span>{% if tile.Optional %}<span class="ptile-badge">{{ t("link.optional") }}</span>{% endif %}</a>
 {% endfor %}
 </div>
 </div>
@@ -55,11 +55,15 @@
 <div class="stack">
 {% for p in Pieces %}
 {% if p.Pool %}
-<article class="card reveal">
-<span class="prep-pin pin-corner" tabindex="0" aria-label="{{ t("prep.label", pct(p.Prep)) }}"><span class="prep-dot lv{{ p.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(p.Prep)) }}</span></span>
-<div class="card-head"><strong>{% for m in p.Pool %}{% if not loop.first %} · {% endif %}<a class="card-link" href="/diary/piece/{{ m.ID }}">{{ m.Composer }} — {{ m.Work }}</a>{% endfor %}</strong></div>
-<div class="meta movement-row"><span class="badge">{{ t("link.optional") }}</span>{% for c in p.Auditions %}{% if c.ID == Audition.ID and c.RoundName %}<span class="badge">{{ c.RoundName }}</span>{% endif %}{% endfor %}</div>
-{% for m in p.Pool %}{% for c in m.Auditions %}{% if c.ID == Audition.ID and c.Note %}<div class="meta">{{ m.Work }}: {{ t("field.note") }} {{ c.Note }}</div>{% endif %}{% if c.ID == Audition.ID and c.SegmentLabels %}<div class="meta">{{ m.Work }}: {{ t("segment.parts") }} {{ c.SegmentLabels | join(", ") }}</div>{% endif %}{% endfor %}{% endfor %}
+<article class="card reveal pool-card">
+{% for m in p.Pool %}
+<div class="subcard">
+<span class="prep-pin pin-corner" tabindex="0" aria-label="{{ t("prep.label", pct(m.Prep)) }}"><span class="prep-dot lv{{ m.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(m.Prep)) }}</span></span>
+<div class="card-head"><strong><a class="card-link" href="/diary/piece/{{ m.ID }}">{{ m.Composer }} — {{ m.Work }}</a></strong></div>
+<div class="meta movement-row"><span class="badge kind">{{ kindLabel(m.Kind) }}</span>{% if m.Movement %}<span>{{ m.Movement }}</span>{% endif %}{% for c in m.Auditions %}{% if c.ID == Audition.ID and c.RoundName %}<span class="badge">{{ c.RoundName }}</span>{% endif %}{% endfor %}<span class="badge">{{ t("link.optional") }}</span></div>
+{% for c in m.Auditions %}{% if c.ID == Audition.ID and c.Note %}<div class="meta">{{ t("field.note") }}: {{ c.Note }}</div>{% endif %}{% if c.ID == Audition.ID and c.SegmentLabels %}<div class="meta">{{ t("segment.parts") }}: {{ c.SegmentLabels | join(", ") }}</div>{% endif %}{% endfor %}
+</div>
+{% endfor %}
 </article>
 {% else %}
 <article class="card reveal">

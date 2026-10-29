@@ -17,13 +17,13 @@
 <div class="section-head"><h2>{{ t("prepmap.title") }}</h2><span class="meta">{{ tp("prepmap.meta", PrepMap | length) }}</span></div>
 <div class="prepmap desk panel reveal" role="img" aria-label="{{ t("prepmap.aria_all") }}">
 <div class="ptiles">
-{% for tile in PrepMap %}<a class="ptile lv{{ tile.Level }}{{ tile.Corner }}" style="left:calc({{ cssf(tile.X) }}% + 3px);top:calc({{ cssf(tile.Y) }}% + 3px);width:calc({{ cssf(tile.W) }}% - 6px);height:calc({{ cssf(tile.H) }}% - 6px)" href="/diary/piece/{{ tile.PieceID }}" title="{{ tile.Title }}"><span>{{ tile.Label }}</span></a>
+{% for tile in PrepMap %}<a class="ptile lv{{ tile.Level }}{{ tile.Corner }}" style="left:calc({{ cssf(tile.X) }}% + 3px);top:calc({{ cssf(tile.Y) }}% + 3px);width:calc({{ cssf(tile.W) }}% - 6px);height:calc({{ cssf(tile.H) }}% - 6px)" href="/diary/piece/{{ tile.PieceID }}" title="{{ tile.Title }}"><span>{{ tile.Label }}</span>{% if tile.Optional %}<span class="ptile-badge">{{ t("link.optional") }}</span>{% endif %}</a>
 {% endfor %}
 </div>
 </div>
 <div class="prepmap mob panel reveal" role="img" aria-label="{{ t("prepmap.aria_all") }}">
 <div class="ptiles">
-{% for tile in PrepMapMobile %}<a class="ptile lv{{ tile.Level }}{{ tile.Corner }}" style="left:calc({{ cssf(tile.X) }}% + 3px);top:calc({{ cssf(tile.Y) }}% + 3px);width:calc({{ cssf(tile.W) }}% - 6px);height:calc({{ cssf(tile.H) }}% - 6px)" href="/diary/piece/{{ tile.PieceID }}" title="{{ tile.Title }}"><span>{{ tile.Label }}</span></a>
+{% for tile in PrepMapMobile %}<a class="ptile lv{{ tile.Level }}{{ tile.Corner }}" style="left:calc({{ cssf(tile.X) }}% + 3px);top:calc({{ cssf(tile.Y) }}% + 3px);width:calc({{ cssf(tile.W) }}% - 6px);height:calc({{ cssf(tile.H) }}% - 6px)" href="/diary/piece/{{ tile.PieceID }}" title="{{ tile.Title }}"><span>{{ tile.Label }}</span>{% if tile.Optional %}<span class="ptile-badge">{{ t("link.optional") }}</span>{% endif %}</a>
 {% endfor %}
 </div>
 </div>

@@ -1590,14 +1590,23 @@ async fn pool_card_on_audition_page_and_prepmap() {
     // Four linked pieces render as two cards: one pool card
     // with the three alternatives, one single card.
     assert_eq!(
-        body.matches("<article class=\"card reveal\">").count(),
+        body.matches("<article class=\"card reveal").count(),
         2,
         "pool members share one card"
     );
-    assert!(
-        body.contains("</a> · <a class=\"card-link\" href=\"/diary/piece/2\">"),
-        "pool card lists every member"
+    // The pool card is composite: one subcard per member, each
+    // with its own head link, inside a single outer card.
+    assert_eq!(
+        body.matches("<div class=\"subcard\">").count(),
+        3,
+        "pool card has one subcard per member"
     );
+    for id in [1, 2, 3] {
+        assert!(
+            body.contains(&format!("href=\"/diary/piece/{id}\"")),
+            "pool subcard links member {id}"
+        );
+    }
     assert!(body.contains("Optional"), "optional badge on the page");
     // The preparation map carries one tile for the pool,
     // labelled with every member.
@@ -1605,6 +1614,57 @@ async fn pool_card_on_audition_page_and_prepmap() {
         body.contains("Dvorak — Concerto &#x2f; Elgar — Concerto &#x2f; Schumann — Concerto"),
         "pool tile lists every member"
     );
+}
+
+#[tokio::test]
+async fn optional_tile_badge_audition_and_diary_scope() {
+    let (r, app) = test_app();
+    {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO auditions (id, name, audition_date, weight) VALUES (1, 'San Carlo', '2027-01-10', 4), (2, 'Roma', '2027-01-20', 4)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO pieces (id, composer, work, movement, kind, difficulty) VALUES (1, 'Dvorak', 'Concerto', 'I mov.', 'solo', 3), (2, 'Haydn', 'Concerto in Re', 'I mov.', 'solo', 3)",
+            [],
+        )
+        .unwrap();
+        // Dvorak is a choice for San Carlo but mandatory for Roma.
+        db.execute(
+            "INSERT INTO piece_audition (piece_id, audition_id, optional) VALUES (1, 1, 1), (1, 2, 0), (2, 1, 0)",
+            [],
+        )
+        .unwrap();
+    }
+    // Audition map: the choice tile carries the badge in both
+    // layouts, the mandatory tile does not.
+    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert_eq!(
+        body.matches("ptile-badge").count(),
+        2,
+        "audition map badges the choice tile in both layouts"
+    );
+    // Diary map: no badge unfiltered, or for Roma where the
+    // piece is mandatory; badge only for the single San Carlo view.
+    for (path, badges) in [
+        ("/diary", 0),
+        ("/diary?c=2", 0),
+        ("/diary?c=1,2", 0),
+        ("/diary?c=1", 2),
+    ] {
+        let resp = r.clone().oneshot(req("GET", path)).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_string(resp).await;
+        assert_eq!(
+            body.matches("ptile-badge").count(),
+            badges,
+            "diary map badge count for {path}"
+        );
+    }
 }
 
 #[tokio::test]
