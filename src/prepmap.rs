@@ -233,6 +233,90 @@ impl App {
                 ..Default::default()
             });
         }
+        // A view filtered to exactly one audition merges the
+        // pool tiles: optional links that share the audition
+        // and one phase become one tile, at the highest member
+        // level, sized by the hardest member. Wider views keep
+        // one tile per piece: a pool belongs to one audition.
+        if let Some(aid) = scope_audition {
+            let mut groups: Vec<(Option<i64>, Vec<i64>)> = Vec::new();
+            for p in &pieces {
+                if let Some(link) = p.auditions.iter().find(|c| c.id == aid && c.optional) {
+                    match groups.iter_mut().find(|(r, _)| *r == link.round_id) {
+                        Some(g) => g.1.push(p.id),
+                        None => groups.push((link.round_id, vec![p.id])),
+                    }
+                }
+            }
+            let mut merged: Vec<PrepTile> = Vec::with_capacity(tiles.len());
+            let mut consumed: std::collections::HashSet<i64> = std::collections::HashSet::new();
+            for t in &tiles {
+                if consumed.contains(&t.piece_id) {
+                    continue;
+                }
+                let group = groups
+                    .iter()
+                    .find(|(_, ids)| ids.len() >= 2 && ids.contains(&t.piece_id));
+                let Some((_, ids)) = group else {
+                    merged.push(t.clone());
+                    continue;
+                };
+                for id in ids {
+                    consumed.insert(*id);
+                }
+                let members: Vec<&PrepTile> =
+                    tiles.iter().filter(|m| ids.contains(&m.piece_id)).collect();
+                let label = members
+                    .iter()
+                    .map(|m| m.label.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" / ");
+                let difficulty = members.iter().map(|m| m.difficulty).max().unwrap_or(1);
+                let level = members.iter().map(|m| m.level).max().unwrap_or(0);
+                let sessions: i64 = members.iter().map(|m| m.sessions).sum();
+                let minutes: i64 = members.iter().map(|m| m.minutes).sum();
+                let rated_members: Vec<&&PrepTile> = members.iter().filter(|m| m.rated).collect();
+                let rated = !rated_members.is_empty();
+                let avg_conf = if rated {
+                    rated_members.iter().map(|m| m.avg_conf).sum::<f64>()
+                        / rated_members.len() as f64
+                } else {
+                    0.0
+                };
+                let prep = members.iter().map(|m| m.prep).fold(f64::INFINITY, f64::min);
+                let mut title = format!(
+                    "{}\n{} · {} · {}",
+                    label,
+                    tr(lang, "prepmap.tile_difficulty", &[FmtArg::Int(difficulty)]),
+                    tr_plural(lang, "sessions.count", sessions, &[]),
+                    dur(minutes)
+                );
+                if rated {
+                    title += &format!(
+                        " · {}",
+                        tr(
+                            lang,
+                            "prepmap.tile_conf",
+                            &[FmtArg::Str(decimal(lang, avg_conf))]
+                        )
+                    );
+                }
+                merged.push(PrepTile {
+                    piece_id: ids[0],
+                    label,
+                    difficulty,
+                    level,
+                    sessions,
+                    minutes,
+                    avg_conf,
+                    rated,
+                    prep,
+                    title,
+                    ..Default::default()
+                });
+            }
+            tiles = merged;
+        }
         // Biggest and least-prepared first: the eye lands where work
         // is needed.
         tiles.sort_by(|a, b| {

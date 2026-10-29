@@ -103,6 +103,7 @@
   "kind.solo": "solo",
   "kind.solo_long": "pieza solista",
   "kind.solos_plural": "piezas solistas",
+  "link.optional": "A elegir",
   "mock.count": "Extractos",
   "mock.delete": "Eliminar simulada",
   "mock.done": "Simulada completada",

@@ -1474,3 +1474,263 @@ async fn diary_days_pagination() {
         "page 0 clamps to first"
     );
 }
+
+#[tokio::test]
+async fn link_optional_round_trip() {
+    let (r, app) = test_app();
+    r.clone()
+        .oneshot(form_req(
+            "/auditions",
+            "name=San+Carlo&date=2027-01-10&weight=4",
+        ))
+        .await
+        .unwrap();
+    // Add the piece with the optional checkbox checked.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Dvorak&work=Concerto&kind=solo&difficulty=3&audition=1&optional-1=1",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert!(app.piece_auditions(1).unwrap()[0].optional);
+    // The edit form carries the checked box.
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/pieces/1/edit"))
+        .await
+        .unwrap();
+    let body = body_string(resp).await;
+    assert!(
+        body.contains("name=\"optional-1\""),
+        "optional checkbox on the form"
+    );
+    assert!(body.contains("checked"), "optional checkbox checked");
+    // An unrelated edit that carries the checkbox keeps it.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/pieces/1/edit",
+            "composer=Dvorak&work=Concerto&movement=I+mov.&kind=solo&difficulty=3&audition=1&optional-1=1",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert!(app.piece_auditions(1).unwrap()[0].optional);
+    // The audition page and the piece page render the badge.
+    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
+    assert!(
+        body_string(resp).await.contains("Optional"),
+        "badge on the audition page"
+    );
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/diary/piece/1"))
+        .await
+        .unwrap();
+    assert!(
+        body_string(resp).await.contains("Optional"),
+        "badge on the piece page"
+    );
+    // Unchecking the box clears the marker.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/pieces/1/edit",
+            "composer=Dvorak&work=Concerto&movement=I+mov.&kind=solo&difficulty=3&audition=1",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert!(!app.piece_auditions(1).unwrap()[0].optional);
+    // A piece added without the checkbox defaults to required.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Haydn&work=Concerto&kind=solo&difficulty=3&audition=1",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert!(!app.piece_auditions(2).unwrap()[0].optional);
+}
+
+#[tokio::test]
+async fn pool_card_on_audition_page_and_prepmap() {
+    let (r, app) = test_app();
+    {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO auditions (id, name, audition_date, weight) VALUES (1, 'San Carlo', '2027-01-10', 4)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO audition_rounds (id, audition_id, position, name) VALUES (1, 1, 1, 'Finale')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO pieces (id, composer, work, movement, kind, difficulty) VALUES (1, 'Dvorak', 'Concerto', 'I mov.', 'solo', 3), (2, 'Schumann', 'Concerto', 'I mov.', 'solo', 3), (3, 'Elgar', 'Concerto', 'I mov.', 'solo', 3), (4, 'Haydn', 'Concerto in Re', 'I mov.', 'solo', 3)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO piece_audition (piece_id, audition_id, round_id, optional) VALUES (1, 1, 1, 1), (2, 1, 1, 1), (3, 1, 1, 1), (4, 1, 1, 0)",
+            [],
+        )
+        .unwrap();
+    }
+    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    // Four linked pieces render as two cards: one pool card
+    // with the three alternatives, one single card.
+    assert_eq!(
+        body.matches("<article class=\"card reveal\">").count(),
+        2,
+        "pool members share one card"
+    );
+    assert!(
+        body.contains("</a> · <a class=\"card-link\" href=\"/diary/piece/2\">"),
+        "pool card lists every member"
+    );
+    assert!(body.contains("Optional"), "optional badge on the page");
+    // The preparation map carries one tile for the pool,
+    // labelled with every member.
+    assert!(
+        body.contains("Dvorak — Concerto &#x2f; Elgar — Concerto &#x2f; Schumann — Concerto"),
+        "pool tile lists every member"
+    );
+}
+
+#[tokio::test]
+async fn pool_plan_card_shared_weight_and_member_choice() {
+    let (r, app) = test_app();
+    let today = today();
+    {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO auditions (id, name, audition_date, weight) VALUES (1, 'San Carlo', '2027-01-10', 4)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO pieces (id, composer, work, movement, kind, difficulty) VALUES (1, 'Dvorak', 'Concerto', 'I mov.', 'solo', 3), (2, 'Schumann', 'Concerto', 'I mov.', 'solo', 3)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO piece_audition (piece_id, audition_id, optional) VALUES (1, 1, 1), (2, 1, 1)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO sessions (date, piece_id, minutes, confidence, note) VALUES (?1, 1, 0, 3, 'baseline'), (?1, 2, 0, 3, 'baseline')",
+            rusqlite::params![today],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO availability (date, start_min, end_min, kind) VALUES (?1, 0, 1439, 'free')",
+            rusqlite::params![today],
+        )
+        .unwrap();
+    }
+    let resp = r.clone().oneshot(req("GET", "/")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    // One plan card for the pool, with a member selector in
+    // its log form next to the manual form's own selector.
+    assert_eq!(
+        body.matches("<article class=\"card plan-card reveal\">")
+            .count(),
+        1,
+        "pool members share one plan card"
+    );
+    assert_eq!(
+        body.matches("<select name=\"piece_id\"").count(),
+        2,
+        "pool card carries a member selector"
+    );
+    // The pool counts the audition weight once, not per member.
+    assert!(body.contains("base 4.0"), "shared weight");
+    assert!(!body.contains("base 8.0"), "weight not summed per member");
+    // Logging through the pool card records on the picked
+    // member only.
+    let resp = r
+        .clone()
+        .oneshot(form_req("/session", "piece_id=2&minutes=20&confidence=4"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let db = app.db.lock().unwrap();
+    let logged: i64 = db
+        .query_row(
+            "SELECT COALESCE(SUM(minutes), 0) FROM sessions WHERE piece_id=2 AND date=?1 AND minutes>0",
+            rusqlite::params![today],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(logged, 20, "session on the picked member");
+    let other: i64 = db
+        .query_row(
+            "SELECT COALESCE(SUM(minutes), 0) FROM sessions WHERE piece_id=1 AND date=?1 AND minutes>0",
+            rusqlite::params![today],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(other, 0, "no session on the other member");
+}
+
+#[tokio::test]
+async fn pool_member_with_mandatory_link_planned_normally() {
+    let (r, app) = test_app();
+    let today = today();
+    {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO auditions (id, name, audition_date, weight) VALUES (1, 'San Carlo', '2027-01-10', 4), (2, 'Cagliari', '2027-02-10', 3)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO pieces (id, composer, work, movement, kind, difficulty) VALUES (1, 'Dvorak', 'Concerto', 'I mov.', 'solo', 3), (2, 'Schumann', 'Concerto', 'I mov.', 'solo', 3)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO piece_audition (piece_id, audition_id, optional) VALUES (1, 1, 1), (1, 2, 0), (2, 1, 1)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO sessions (date, piece_id, minutes, confidence, note) VALUES (?1, 1, 0, 3, 'baseline'), (?1, 2, 0, 3, 'baseline')",
+            rusqlite::params![today],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO availability (date, start_min, end_min, kind) VALUES (?1, 0, 1439, 'free')",
+            rusqlite::params![today],
+        )
+        .unwrap();
+    }
+    let resp = r.clone().oneshot(req("GET", "/")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    // The mandatory-elsewhere member leaves the pool: two
+    // single cards, no pool selector beyond the manual form.
+    assert_eq!(
+        body.matches("<article class=\"card plan-card reveal\">")
+            .count(),
+        2,
+        "no pool card when a member is mandatory elsewhere"
+    );
+    assert_eq!(
+        body.matches("<select name=\"piece_id\"").count(),
+        1,
+        "no pool member selector"
+    );
+}

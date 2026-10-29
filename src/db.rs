@@ -62,6 +62,11 @@ pub struct Audition {
     /// piece_audition; empty when the link asks the whole piece.
     #[serde(rename = "SegmentLabels")]
     pub segment_labels: Vec<String>,
+    /// Per-link optional marker, set only when read through
+    /// piece_audition: the audition asks this piece as one
+    /// alternative of a candidate choice.
+    #[serde(rename = "Optional")]
+    pub optional: bool,
     /// Mean preparation level 0..4 of its pieces, stamped on demand.
     #[serde(rename = "Level")]
     pub level: i64,
@@ -110,6 +115,11 @@ pub struct Piece {
     /// Preparation score 0..1, stamped on demand (not persisted).
     #[serde(rename = "Prep")]
     pub prep: f64,
+    /// Pool members for a pool card, set on demand by the
+    /// audition page: non-empty only on the first member of a
+    /// pool, listing every member including itself.
+    #[serde(rename = "Pool")]
+    pub pool: Vec<Piece>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
@@ -382,6 +392,13 @@ fn migrate(db: &Connection) -> Result<()> {
         "ALTER TABLE piece_audition ADD COLUMN round_id INTEGER REFERENCES audition_rounds(id) ON DELETE SET NULL",
         "round_id",
     )?;
+    // piece_audition.optional marks the link as one alternative
+    // of a candidate choice; 0 keeps the link required.
+    add_column(
+        db,
+        "ALTER TABLE piece_audition ADD COLUMN optional INTEGER NOT NULL DEFAULT 0",
+        "optional",
+    )?;
     // pieces.target_bpm is the optional target tempo of a piece; NULL
     // means the piece carries no tempo signal.
     add_column(
@@ -522,7 +539,7 @@ impl App {
         let db = self.conn();
         let mut stmt = db.prepare(
             "SELECT c.id, c.name, c.audition_date, c.weight, c.archived_at IS NOT NULL, pc.note,
-			pc.round_id, COALESCE(rd.name, '')
+			pc.round_id, COALESCE(rd.name, ''), pc.optional
 			FROM auditions c JOIN piece_audition pc ON pc.audition_id=c.id
 			LEFT JOIN audition_rounds rd ON rd.id = pc.round_id
 			WHERE pc.piece_id=? ORDER BY c.audition_date",
@@ -538,6 +555,7 @@ impl App {
                     note: row.get(5)?,
                     round_id: row.get(6)?,
                     round_name: row.get(7)?,
+                    optional: row.get::<_, i64>(8)? != 0,
                     ..Default::default()
                 })
             })?

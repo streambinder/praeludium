@@ -26,7 +26,7 @@
 <label>{{ t("field.difficulty") }} <input type="range" name="difficulty" min="1" max="5" step="1" value="3" oninput="this.nextElementSibling.textContent=this.value"> <output>3</output></label>
 <label>{{ t("field.target_bpm") }} <input type="number" name="target_bpm" min="20" max="400"></label>
 <fieldset><legend>{{ t("nav.auditions") }}</legend>
-{% for c in Auditions %}<div class="link-excerpt"><label class="check"><input type="checkbox" name="audition" value="{{ c.ID }}"> {{ c.Name }}</label> <label>{{ t("field.note") }} <input type="text" name="note-{{ c.ID }}"></label>{% include "segment_new.html" %}</div>{% endfor %}
+{% for c in Auditions %}<div class="link-excerpt"><label class="check"><input type="checkbox" name="audition" value="{{ c.ID }}"> {{ c.Name }}</label> <label>{{ t("field.note") }} <input type="text" name="note-{{ c.ID }}"></label> <label class="check"><input type="checkbox" name="optional-{{ c.ID }}" value="1"> {{ t("link.optional") }}</label>{% include "segment_new.html" %}</div>{% endfor %}
 </fieldset>
 <button type="submit">{{ t("common.add") }}</button>
 </form>

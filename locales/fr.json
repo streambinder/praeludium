@@ -103,6 +103,7 @@
   "kind.solo": "solo",
   "kind.solo_long": "pièce solo",
   "kind.solos_plural": "pièces solo",
+  "link.optional": "Au choix",
   "mock.count": "Morceaux",
   "mock.delete": "Supprimer la simulée",
   "mock.done": "Simulée terminée",
