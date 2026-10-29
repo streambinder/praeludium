@@ -1124,6 +1124,110 @@ async fn session_logging_with_segment_scope() {
 }
 
 #[tokio::test]
+async fn manual_session_date() {
+    let (r, app) = test_app();
+    r.clone()
+        .oneshot(form_req("/auditions", "name=Roma&date=2026-12-06&weight=4"))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Bach&work=Suite&kind=solo&difficulty=3&audition=1",
+        ))
+        .await
+        .unwrap();
+
+    // A chosen past date is stored as given.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/session",
+            "piece_id=1&minutes=25&confidence=4&date=2026-08-15",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let stored: String = app
+        .db
+        .lock()
+        .unwrap()
+        .query_row("SELECT date FROM sessions WHERE piece_id=1", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(stored, "2026-08-15");
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/diary/day/2026-08-15"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // A skipped marker on the chosen date clears, as on today.
+    seed_session(&app, "2026-08-16", 1, 0, 0, "skipped");
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/session",
+            "piece_id=1&minutes=10&confidence=3&date=2026-08-16",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let markers: i64 = app
+        .db
+        .lock()
+        .unwrap()
+        .query_row(
+            "SELECT COUNT(*) FROM sessions WHERE piece_id=1 AND date='2026-08-16' AND note='skipped'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(markers, 0);
+
+    // Malformed and future dates are rejected.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/session",
+            "piece_id=1&minutes=10&confidence=3&date=2026-02-30",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/session",
+            "piece_id=1&minutes=10&confidence=3&date=2999-01-01",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    // No date still means today.
+    let resp = r
+        .clone()
+        .oneshot(form_req("/session", "piece_id=1&minutes=10&confidence=3"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let stored: String = app
+        .db
+        .lock()
+        .unwrap()
+        .query_row(
+            "SELECT date FROM sessions WHERE piece_id=1 AND minutes=10 AND confidence=3 AND date=?",
+            rusqlite::params![today()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored, today());
+}
+
+#[tokio::test]
 async fn today_plan_renders_segmented_items() {
     let (r, app) = test_app();
     let today = today();
