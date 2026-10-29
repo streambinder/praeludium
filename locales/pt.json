@@ -84,6 +84,7 @@
   "field.other_link": "Outra ligação",
   "field.priority": "Prioridade",
   "field.security": "Segurança",
+  "field.session_date": "Data",
   "field.target_bpm": "Tempo alvo (BPM)",
   "field.work": "Obra",
   "filter.all": "todas",

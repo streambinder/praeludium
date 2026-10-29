@@ -55,6 +55,9 @@
 <label>{{ t("today.minutes") }} <input type="number" name="minutes" value="10" min="0" max="600"></label>
 </div>
 <div class="row">
+<label>{{ t("field.session_date") }} <input type="date" name="date" value="{{ Date }}"></label>
+</div>
+<div class="row">
 <label>{{ t("field.security") }} <input type="range" name="confidence" min="1" max="5" step="1" value="3" oninput="this.nextElementSibling.textContent=this.value+'/5'"> <output>3/5</output></label>
 <label>{{ t("field.metronome") }} <input type="number" name="bpm" min="1" max="400" placeholder="{{ t("field.optional") }}"></label>
 </div>

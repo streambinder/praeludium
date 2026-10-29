@@ -1352,6 +1352,30 @@ pub async fn handle_session(State(app): State<Shared>, req: axum::extract::Reque
             &tr(&req_lang(&headers), "err.session_invalid", &[]),
         );
     }
+    // A date from the manual form replaces today; an absent
+    // date keeps today. A malformed or future date is invalid.
+    let today = today_str();
+    let date = match form.get("date").trim() {
+        "" => today.clone(),
+        raw => match chrono::NaiveDate::parse_from_str(raw, "%Y-%m-%d") {
+            Ok(parsed) => {
+                let iso = parsed.format("%Y-%m-%d").to_string();
+                if iso > today {
+                    return text_error(
+                        StatusCode::BAD_REQUEST,
+                        &tr(&req_lang(&headers), "err.session_invalid", &[]),
+                    );
+                }
+                iso
+            }
+            Err(_) => {
+                return text_error(
+                    StatusCode::BAD_REQUEST,
+                    &tr(&req_lang(&headers), "err.session_invalid", &[]),
+                );
+            }
+        },
+    };
     let bpm_raw = form.get("bpm").trim();
     let bpm: Option<i64> = if bpm_raw.is_empty() {
         None
@@ -1374,14 +1398,13 @@ pub async fn handle_session(State(app): State<Shared>, req: axum::extract::Reque
             None
         }
     };
-    let today = today_str();
     let inserted = {
         let db = app.db.lock().unwrap_or_else(|p| p.into_inner());
         db.execute(
             "INSERT INTO sessions(date, piece_id, minutes, confidence, note, bpm, segment_id)
 			VALUES(?,?,?,?,?,?,?)",
             params![
-                today,
+                date,
                 piece_id,
                 minutes,
                 conf,
@@ -1397,14 +1420,14 @@ pub async fn handle_session(State(app): State<Shared>, req: axum::extract::Reque
         Err(e) => return err500(&e),
     };
     // A piece that was practiced after all is not skipped: logging
-    // real minutes on it clears any skip marker it carries today.
+    // real minutes on it clears any skip marker it carries that day.
     if minutes > 0 {
         let cleared = {
             let db = app.db.lock().unwrap_or_else(|p| p.into_inner());
             db.execute(
                 "DELETE FROM sessions
 				WHERE date=? AND piece_id=? AND id<>? AND note IN ('skipped','postponed','auto-skipped')",
-                params![today, piece_id, saved_id],
+                params![date, piece_id, saved_id],
             )
         };
         if let Err(e) = cleared {
@@ -1412,7 +1435,7 @@ pub async fn handle_session(State(app): State<Shared>, req: axum::extract::Reque
         }
     }
     eprintln!(
-        "event session saved piece={piece_id} date={today} minutes={minutes} confidence={conf}"
+        "event session saved piece={piece_id} date={date} minutes={minutes} confidence={conf}"
     );
     see_other("/")
 }
