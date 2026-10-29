@@ -43,6 +43,8 @@ pub struct PrepTile {
     pub title: String, // tooltip text
     #[serde(rename = "Corner")]
     pub corner: String, // CSS classes for tiles on the map corners
+    #[serde(rename = "Optional")]
+    pub optional: bool, // true when the tile is a choice for the scoped audition
 }
 
 #[derive(Debug, Clone, Default)]
@@ -219,6 +221,13 @@ impl App {
                     )
                 );
             }
+            // The badge is meaningful only for a view scoped to
+            // exactly one audition: in wider views the same piece
+            // can be a choice for one audition and mandatory for
+            // another, so no tile claims it.
+            let optional = scope_audition
+                .map(|aid| p.auditions.iter().any(|c| c.id == aid && c.optional))
+                .unwrap_or(false);
             tiles.push(PrepTile {
                 piece_id: p.id,
                 label,
@@ -230,6 +239,7 @@ impl App {
                 rated,
                 prep: score,
                 title,
+                optional,
                 ..Default::default()
             });
         }
@@ -312,6 +322,7 @@ impl App {
                     rated,
                     prep,
                     title,
+                    optional: true,
                     ..Default::default()
                 });
             }

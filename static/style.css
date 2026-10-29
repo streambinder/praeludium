@@ -421,6 +421,25 @@ h2 {
   opacity: 0.62;
 }
 
+/* A pool card is a composite of one subcard per alternative:
+  each keeps its own pin, head, badges and note, divided by a
+  border instead of a shadow so the group reads as one card. */
+.pool-card {
+  padding: 0.9rem;
+}
+
+.subcard {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.8rem;
+}
+
+.subcard:last-child {
+  margin-bottom: 0;
+}
+
 .card-head {
   display: flex;
   flex-wrap: wrap;
@@ -1561,8 +1580,10 @@ a:hover {
   position: absolute;
   border-radius: 3px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   text-decoration: none;
   color: var(--ink);
   overflow: hidden;
@@ -1635,6 +1656,21 @@ a:hover {
   text-wrap: balance;
   padding: 4px 6px;
   display: block;
+}
+
+/* The choice badge on a tile: a small pill under the label,
+  clipped with the rest of the tile when the tile is tiny. */
+.ptile span.ptile-badge {
+  display: inline-flex;
+  font-size: clamp(7px, 9cqw, 0.7rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: rgb(138 90 46 / 10%);
+  color: var(--accent-deep);
+  border: 1px solid rgb(138 90 46 / 22%);
 }
 
 /* Map corners: round the outer corner of the corner tiles. */
