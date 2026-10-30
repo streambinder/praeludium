@@ -282,6 +282,36 @@ var SEGMENT_WHOLE = {{ t("segment.whole") | tojson | safe }};
       strikeBell(1.5, 0.14);
     } catch (e) {}
   }
+  // Screen wake lock, held only while a plan timer with a preset
+  // target runs: a locked phone suspends the page, so the bell
+  // would only ring on unlock, late. The manual timer has no
+  // target and never rings, so it never holds the lock. The
+  // browser releases the lock itself when the tab hides; it is
+  // re-requested when the tab is visible again.
+  var wakeTimers = [];
+  var wakeSentinel = null;
+  function requestWakeLock() {
+    if (!('wakeLock' in navigator) || wakeSentinel) return;
+    try {
+      var p = navigator.wakeLock.request('screen');
+      p.then(function(s) {
+        wakeSentinel = s;
+        wakeSentinel.addEventListener('release', function() {
+          wakeSentinel = null;
+          if (document.visibilityState === 'visible') updateWakeLock();
+        });
+      }, function() { wakeSentinel = null; });
+    } catch (e) { wakeSentinel = null; }
+  }
+  function releaseWakeLock() {
+    if (!wakeSentinel) return;
+    try { wakeSentinel.release(); } catch (e) {}
+    wakeSentinel = null;
+  }
+  function updateWakeLock() {
+    var need = wakeTimers.some(function(t) { return t.targetMs > 0 && t.isRunning(); });
+    if (need) requestWakeLock(); else releaseWakeLock();
+  }
   function fmt(ms) {
     var s = Math.floor(ms / 1000);
     var m = Math.floor(s / 60);
@@ -343,6 +373,7 @@ var SEGMENT_WHOLE = {{ t("segment.whole") | tojson | safe }};
       }
       save();
       paint();
+      updateWakeLock();
     });
     done.addEventListener('click', function() {
       var mins = Math.round(elapsed() / 60000);
@@ -352,13 +383,19 @@ var SEGMENT_WHOLE = {{ t("segment.whole") | tojson | safe }};
       state = { acc: 0, since: 0 };
       if (key) { try { localStorage.removeItem(key); } catch (e) {} }
       paint();
+      updateWakeLock();
     });
     if (select) select.addEventListener('change', function() { load(); paint(); });
     load();
     paint();
     timers.push(paint);
+    wakeTimers.push({ targetMs: targetMs, isRunning: function() { return !!state.since; } });
   });
   if (timers.length) setInterval(function() { timers.forEach(function(p) { p(); }); }, 500);
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') updateWakeLock();
+  });
+  updateWakeLock();
   // Salta asks for a second tap before submitting: the first tap only
   // arms the button for a few seconds.
   document.querySelectorAll('.skip-btn').forEach(function(btn) {
