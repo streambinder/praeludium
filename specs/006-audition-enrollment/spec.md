@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-12
 
-**Status**: Draft (pending ratification by the owner)
+**Status**: Complete (ratified in #58, implemented in #59, live 2026-11-12)
 
 **Amended**: 2026-11-12 (enrollment moves from a boolean
 on auditions to an enrollments join table, for the
