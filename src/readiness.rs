@@ -367,6 +367,7 @@ mod tests {
         App {
             db: std::sync::Mutex::new(crate::db::open_memory().unwrap()),
             data_dir: std::path::PathBuf::from("/tmp"),
+            current_user_id: crate::db::SEEDED_USER_ID,
         }
     }
 
@@ -374,6 +375,11 @@ mod tests {
         let db = app.db.lock().unwrap();
         db.execute(
             "INSERT INTO auditions (id, name, audition_date) VALUES (1, 'A', '2027-01-08')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1)",
             [],
         )
         .unwrap();
@@ -520,6 +526,7 @@ mod scope_tests {
         App {
             db: std::sync::Mutex::new(crate::db::open_memory().unwrap()),
             data_dir: std::path::PathBuf::from("/tmp"),
+            current_user_id: crate::db::SEEDED_USER_ID,
         }
     }
 
@@ -532,6 +539,11 @@ mod scope_tests {
         let db = app.db.lock().unwrap();
         db.execute(
             "INSERT INTO auditions (id, name, audition_date) VALUES (1, 'A', '2027-01-08'), (2, 'B', '2027-02-08')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1), (1, 2)",
             [],
         )
         .unwrap();

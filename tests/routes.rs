@@ -12,6 +12,7 @@ fn test_app() -> (axum::Router, Arc<App>) {
     let app = Arc::new(App {
         db: Mutex::new(open_memory().unwrap()),
         data_dir: std::env::temp_dir().join(format!("praeludium-test-{}", std::process::id())),
+        current_user_id: praeludium::db::SEEDED_USER_ID,
     });
     let r = router(app.clone());
     (r, app)
@@ -325,6 +326,7 @@ async fn recording_upload_share_and_range() {
     let app = Arc::new(App {
         db: Mutex::new(open_memory().unwrap()),
         data_dir: dir.clone(),
+        current_user_id: praeludium::db::SEEDED_USER_ID,
     });
     let r = router(app);
     r.clone()
@@ -585,6 +587,12 @@ async fn today_skip_and_availability_delete() {
     let (r, app) = test_app();
     r.clone()
         .oneshot(form_req("/auditions", "name=Cup&date=2027-01-10&weight=4"))
+        .await
+        .unwrap();
+    // A new audition starts unenrolled: enroll it so the piece
+    // reaches the plan.
+    r.clone()
+        .oneshot(form_req("/auditions/1/enrollment", ""))
         .await
         .unwrap();
     r.clone()
@@ -906,6 +914,7 @@ async fn recording_delete_flow() {
     let app = Arc::new(App {
         db: Mutex::new(open_memory().unwrap()),
         data_dir: dir.clone(),
+        current_user_id: praeludium::db::SEEDED_USER_ID,
     });
     let r = router(app);
     r.clone()
@@ -1235,6 +1244,11 @@ async fn today_plan_renders_segmented_items() {
         let db = app.db.lock().unwrap();
         db.execute(
             "INSERT INTO auditions (id, name, audition_date, weight) VALUES (1, 'Roma', '2027-01-10', 4), (2, 'Napoli', '2027-02-10', 3)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1), (1, 2)",
             [],
         )
         .unwrap();
@@ -1569,6 +1583,11 @@ async fn pool_card_on_audition_page_and_prepmap() {
         )
         .unwrap();
         db.execute(
+            "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1)",
+            [],
+        )
+        .unwrap();
+        db.execute(
             "INSERT INTO audition_rounds (id, audition_id, position, name) VALUES (1, 1, 1, 'Finale')",
             [],
         )
@@ -1627,6 +1646,11 @@ async fn optional_tile_badge_audition_and_diary_scope() {
         )
         .unwrap();
         db.execute(
+            "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1), (1, 2)",
+            [],
+        )
+        .unwrap();
+        db.execute(
             "INSERT INTO pieces (id, composer, work, movement, kind, difficulty) VALUES (1, 'Dvorak', 'Concerto', 'I mov.', 'solo', 3), (2, 'Haydn', 'Concerto in Re', 'I mov.', 'solo', 3)",
             [],
         )
@@ -1675,6 +1699,11 @@ async fn pool_plan_card_shared_weight_and_member_choice() {
         let db = app.db.lock().unwrap();
         db.execute(
             "INSERT INTO auditions (id, name, audition_date, weight) VALUES (1, 'San Carlo', '2027-01-10', 4)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1)",
             [],
         )
         .unwrap();
@@ -1757,6 +1786,11 @@ async fn pool_member_with_mandatory_link_planned_normally() {
         )
         .unwrap();
         db.execute(
+            "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1), (1, 2)",
+            [],
+        )
+        .unwrap();
+        db.execute(
             "INSERT INTO pieces (id, composer, work, movement, kind, difficulty) VALUES (1, 'Dvorak', 'Concerto', 'I mov.', 'solo', 3), (2, 'Schumann', 'Concerto', 'I mov.', 'solo', 3)",
             [],
         )
@@ -1792,5 +1826,133 @@ async fn pool_member_with_mandatory_link_planned_normally() {
         body.matches("<select name=\"piece_id\"").count(),
         1,
         "no pool member selector"
+    );
+}
+
+#[tokio::test]
+async fn enrollment_toggle_round_trip() {
+    let (r, app) = test_app();
+    r.clone()
+        .oneshot(form_req("/auditions", "name=Cup&date=2027-01-10&weight=4"))
+        .await
+        .unwrap();
+    // A new audition starts unenrolled: no badge, enroll button.
+    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
+    let body = body_string(resp).await;
+    assert!(!body.contains("Enrolled"), "starts unenrolled: {body}");
+    assert!(body.contains("Enroll"), "enroll button shows");
+    // Enroll: the row appears and the badge flips to Unenroll.
+    let resp = r
+        .clone()
+        .oneshot(form_req("/auditions/1/enrollment", ""))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        enrollment_count(&app, 1),
+        1,
+        "one enrollments row after enroll"
+    );
+    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
+    let body = body_string(resp).await;
+    assert!(body.contains("Enrolled"), "badge shows after enroll");
+    assert!(body.contains("Unenroll"), "unenroll button shows");
+    // Unenroll: the row is gone and the badge with it.
+    let resp = r
+        .clone()
+        .oneshot(form_req("/auditions/1/enrollment", ""))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert_eq!(enrollment_count(&app, 1), 0, "no row after unenroll");
+    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
+    assert!(!body_string(resp).await.contains("Enrolled"));
+    // An unknown audition is a 404, not a flip.
+    let resp = r
+        .clone()
+        .oneshot(form_req("/auditions/999/enrollment", ""))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+fn enrollment_count(app: &App, audition_id: i64) -> i64 {
+    let db = app.db.lock().unwrap();
+    db.query_row(
+        "SELECT COUNT(*) FROM enrollments WHERE user_id=1 AND audition_id=?",
+        rusqlite::params![audition_id],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn plan_excludes_unenrolled_and_diary_stays_open() {
+    let (r, app) = test_app();
+    r.clone()
+        .oneshot(form_req("/auditions", "name=Cup&date=2027-01-10&weight=4"))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Bach&work=Suite&kind=solo&difficulty=3&audition=1",
+        ))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req("/pieces/1/baseline", "confidence=4"))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/availability",
+            &format!("date={}&start=08:00&end=23:00&label=", today()),
+        ))
+        .await
+        .unwrap();
+    // Unenrolled: the piece is linked but the plan is empty.
+    let resp = r.clone().oneshot(req("GET", "/")).await.unwrap();
+    let body = body_string(resp).await;
+    assert_eq!(
+        body.matches("<article class=\"card plan-card reveal\">")
+            .count(),
+        0,
+        "no plan card while unenrolled"
+    );
+    // Diary logging still works on the unenrolled piece. The
+    // session is dated in the past, so today stays unpracticed
+    // and the plan card below still renders as a plan item.
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            "/session",
+            "piece_id=1&minutes=10&confidence=3&date=2026-01-05",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let logged: i64 = {
+        let db = app.db.lock().unwrap();
+        db.query_row(
+            "SELECT COUNT(*) FROM sessions WHERE piece_id=1 AND minutes=10",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(logged, 1, "session saved while unenrolled");
+    // Enroll: the same piece reaches the plan.
+    r.clone()
+        .oneshot(form_req("/auditions/1/enrollment", ""))
+        .await
+        .unwrap();
+    let resp = r.clone().oneshot(req("GET", "/")).await.unwrap();
+    let body = body_string(resp).await;
+    assert_eq!(
+        body.matches("<article class=\"card plan-card reveal\">")
+            .count(),
+        1,
+        "one plan card after enroll"
     );
 }

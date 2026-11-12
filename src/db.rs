@@ -35,7 +35,14 @@ pub fn ser_null_i64<S: serde::Serializer>(
 pub struct App {
     pub db: Mutex<Connection>,
     pub data_dir: PathBuf,
+    /// The user whose enrollments gate the plan. The app has
+    /// one user today, the seeded one; user switching is a
+    /// later cycle.
+    pub current_user_id: i64,
 }
+
+/// The seeded user: the student whose plan this is.
+pub const SEEDED_USER_ID: i64 = 1;
 
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 pub struct Audition {
@@ -49,6 +56,11 @@ pub struct Audition {
     pub weight: i64,
     #[serde(rename = "Archived")]
     pub archived: bool,
+    /// Enrolled for the current user: the audition feeds
+    /// their daily plan. Set only through the reads, from
+    /// the enrollments table.
+    #[serde(rename = "Enrolled")]
+    pub enrolled: bool,
     /// Per-link note, set only when read through piece_audition.
     #[serde(rename = "Note")]
     pub note: String,
@@ -359,10 +371,30 @@ fn migrate(db: &Connection) -> Result<()> {
 			segment_id INTEGER NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
 			PRIMARY KEY(piece_id, audition_id, segment_id)
 		)",
+        "CREATE TABLE IF NOT EXISTS users(
+			id INTEGER PRIMARY KEY,
+			name TEXT NOT NULL
+		)",
+        "CREATE TABLE IF NOT EXISTS enrollments(
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			audition_id INTEGER NOT NULL REFERENCES auditions(id) ON DELETE CASCADE,
+			PRIMARY KEY(user_id, audition_id)
+		)",
     ];
     for s in stmts {
         db.execute_batch(s)?;
     }
+    // Enrollment is opt-in per user. The migration seeds the one
+    // user and enrolls them in every existing audition, so the
+    // deploy alone changes nothing in the plan.
+    db.execute(
+        "INSERT OR IGNORE INTO users(id, name) VALUES(?, 'Agnese')",
+        params![SEEDED_USER_ID],
+    )?;
+    db.execute(
+        "INSERT OR IGNORE INTO enrollments(user_id, audition_id) SELECT ?, id FROM auditions",
+        params![SEEDED_USER_ID],
+    )?;
     // auditions.archived_at was added after the first schema revision.
     add_column(
         db,
@@ -510,6 +542,7 @@ fn scan_audition(row: &rusqlite::Row) -> Result<Audition> {
         date: row.get(2)?,
         weight: row.get(3)?,
         archived: row.get::<_, i64>(4)? != 0,
+        enrolled: row.get::<_, i64>(5)? != 0,
         ..Default::default()
     })
 }
@@ -521,7 +554,8 @@ impl App {
 
     pub fn list_auditions(&self, include_archived: bool) -> Result<Vec<Audition>> {
         let mut q = String::from(
-            "SELECT id, name, audition_date, weight, archived_at IS NOT NULL FROM auditions",
+            "SELECT id, name, audition_date, weight, archived_at IS NOT NULL,
+			EXISTS(SELECT 1 FROM enrollments e WHERE e.user_id=?1 AND e.audition_id=auditions.id) FROM auditions",
         );
         if !include_archived {
             q += " WHERE archived_at IS NULL";
@@ -530,7 +564,7 @@ impl App {
         let db = self.conn();
         let mut stmt = db.prepare(&q)?;
         let rows = stmt
-            .query_map([], scan_audition)?
+            .query_map(params![self.current_user_id], scan_audition)?
             .collect::<Result<Vec<_>>>()?;
         Ok(rows)
     }
@@ -539,13 +573,14 @@ impl App {
         let db = self.conn();
         let mut stmt = db.prepare(
             "SELECT c.id, c.name, c.audition_date, c.weight, c.archived_at IS NOT NULL, pc.note,
-			pc.round_id, COALESCE(rd.name, ''), pc.optional
+			pc.round_id, COALESCE(rd.name, ''), pc.optional,
+			EXISTS(SELECT 1 FROM enrollments e WHERE e.user_id=?2 AND e.audition_id=c.id)
 			FROM auditions c JOIN piece_audition pc ON pc.audition_id=c.id
 			LEFT JOIN audition_rounds rd ON rd.id = pc.round_id
-			WHERE pc.piece_id=? ORDER BY c.audition_date",
+			WHERE pc.piece_id=?1 ORDER BY c.audition_date",
         )?;
         let mut rows = stmt
-            .query_map(params![piece_id], |row| {
+            .query_map(params![piece_id, self.current_user_id], |row| {
                 Ok(Audition {
                     id: row.get(0)?,
                     name: row.get(1)?,
@@ -556,6 +591,7 @@ impl App {
                     round_id: row.get(6)?,
                     round_name: row.get(7)?,
                     optional: row.get::<_, i64>(8)? != 0,
+                    enrolled: row.get::<_, i64>(9)? != 0,
                     ..Default::default()
                 })
             })?
@@ -1039,6 +1075,7 @@ mod tests {
         App {
             db: Mutex::new(open_memory().unwrap()),
             data_dir: PathBuf::from("/tmp"),
+            current_user_id: SEEDED_USER_ID,
         }
     }
 

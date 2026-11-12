@@ -980,6 +980,7 @@ mod tests {
         App {
             db: std::sync::Mutex::new(crate::db::open_memory().unwrap()),
             data_dir: std::path::PathBuf::from("/tmp"),
+            current_user_id: crate::db::SEEDED_USER_ID,
         }
     }
 

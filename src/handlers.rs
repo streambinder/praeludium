@@ -233,9 +233,10 @@ impl App {
         };
         let db = self.db.lock().unwrap_or_else(|p| p.into_inner());
         db.query_row(
-            "SELECT id, name, audition_date, weight, archived_at IS NOT NULL
-			FROM auditions WHERE id=?",
-            params![id],
+            "SELECT id, name, audition_date, weight, archived_at IS NOT NULL,
+			EXISTS(SELECT 1 FROM enrollments e WHERE e.user_id=?2 AND e.audition_id=auditions.id)
+			FROM auditions WHERE id=?1",
+            params![id, self.current_user_id],
             |row| {
                 Ok(Audition {
                     id: row.get(0)?,
@@ -243,6 +244,7 @@ impl App {
                     date: row.get(2)?,
                     weight: row.get(3)?,
                     archived: row.get::<_, i64>(4)? != 0,
+                    enrolled: row.get::<_, i64>(5)? != 0,
                     ..Default::default()
                 })
             },
@@ -419,14 +421,14 @@ pub struct TodayData {
     pub segments_json: String,
 }
 
-/// The piece's non-archived, not-yet-held auditions with their
-/// weights, plus the days until the nearest one.
+/// The piece's non-archived, not-yet-held, enrolled auditions
+/// with their weights, plus the days until the nearest one.
 pub fn upcoming_auditions(p: &Piece, today: &str) -> DbResult<(Vec<Audition>, Vec<i64>, i64)> {
     let mut upcoming = Vec::new();
     let mut weights = Vec::new();
     let mut days: i64 = -1;
     for c in &p.auditions {
-        if c.archived || c.date.as_str() < today {
+        if c.archived || !c.enrolled || c.date.as_str() < today {
             continue;
         }
         upcoming.push(c.clone());
@@ -802,7 +804,7 @@ impl App {
         let auditions = self.list_auditions(false)?;
         let mut out = Vec::new();
         for c in &auditions {
-            if c.date.as_str() < today {
+            if c.date.as_str() < today || !c.enrolled {
                 continue;
             }
             let (mut sum, mut n) = (0.0f64, 0i64);
@@ -2482,6 +2484,46 @@ pub async fn handle_restore_audition(
         "/auditions".into(),
         "audition restored",
     )
+}
+
+/// Flip the enrollment of the current user in one audition:
+/// enroll inserts the enrollments row, unenroll deletes it.
+/// The toggle redirects back to the audition detail page.
+pub async fn handle_toggle_enrollment(
+    State(app): State<Shared>,
+    Path(id): Path<String>,
+    req: axum::extract::Request,
+) -> Response {
+    let (_h, _q, _form) = match form_of(req).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    let c = match app.audition_or_404(&id) {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
+    let db = app.db.lock().unwrap_or_else(|p| p.into_inner());
+    let done = if c.enrolled {
+        db.execute(
+            "DELETE FROM enrollments WHERE user_id=? AND audition_id=?",
+            params![app.current_user_id, c.id],
+        )
+    } else {
+        db.execute(
+            "INSERT INTO enrollments(user_id, audition_id) VALUES(?, ?)",
+            params![app.current_user_id, c.id],
+        )
+    };
+    match done {
+        Ok(_) => {
+            eprintln!(
+                "event enrollment toggled audition={} enrolled={}",
+                c.id, !c.enrolled
+            );
+            see_other(&format!("/auditions/{}", c.id))
+        }
+        Err(e) => err500(&e),
+    }
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -4506,6 +4548,7 @@ pub fn router(app: Shared) -> axum::Router {
         )
         .route("/auditions/{id}/archive", post(handle_archive_audition))
         .route("/auditions/{id}/restore", post(handle_restore_audition))
+        .route("/auditions/{id}/enrollment", post(handle_toggle_enrollment))
         .route(
             "/auditions/{id}/mock",
             get(handle_mock_setup).post(handle_mock_create),
@@ -4691,6 +4734,7 @@ mod tests {
         App {
             db: std::sync::Mutex::new(crate::db::open_memory().unwrap()),
             data_dir: std::path::PathBuf::from("/tmp"),
+            current_user_id: crate::db::SEEDED_USER_ID,
         }
     }
 
@@ -4699,6 +4743,12 @@ mod tests {
         db.execute(
             "INSERT INTO auditions (id, name, audition_date, weight) VALUES (?, 'Aud', ?, ?)",
             params![id, date, weight],
+        )
+        .unwrap();
+        // The seed models an audition the user is enrolled in.
+        db.execute(
+            "INSERT INTO enrollments (user_id, audition_id) VALUES (?, ?)",
+            params![crate::db::SEEDED_USER_ID, id],
         )
         .unwrap();
     }
@@ -4873,6 +4923,7 @@ mod tests {
             name: format!("Aud{id}"),
             date: date.to_string(),
             weight,
+            enrolled: true,
             ..Default::default()
         }
     }
@@ -4885,6 +4936,10 @@ mod tests {
                 Audition {
                     archived: true,
                     ..audition(2, "2027-01-01", 3)
+                },
+                Audition {
+                    enrolled: false,
+                    ..audition(5, "2026-10-21", 5)
                 },
                 audition(3, "2026-10-25", 4),
                 audition(4, "2026-10-22", 5),
