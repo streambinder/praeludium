@@ -69,6 +69,7 @@ async fn run(cfg: Config) -> Result<(), Box<dyn std::error::Error>> {
     let app = Arc::new(App {
         db: std::sync::Mutex::new(db),
         data_dir: std::path::PathBuf::from(&cfg.data_dir),
+        current_user_id: praeludium::db::SEEDED_USER_ID,
     });
     // Authentication is enforced by the reverse proxy in front of
     // praeludium: the app itself serves everything, including

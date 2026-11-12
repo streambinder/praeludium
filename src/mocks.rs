@@ -194,6 +194,7 @@ mod tests {
         let app = App {
             db: Mutex::new(open_memory().unwrap()),
             data_dir: std::path::PathBuf::from("/tmp"),
+            current_user_id: crate::db::SEEDED_USER_ID,
         };
         let db = app.db.lock().unwrap();
         db.execute(

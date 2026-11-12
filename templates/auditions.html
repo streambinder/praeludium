@@ -44,7 +44,7 @@
 <div class="card-head">
 <strong><a class="card-link" href="/auditions/{{ r.ID }}">{{ r.Name }}</a></strong>
 {% if r.Archived %}<span class="badge muted">{{ t("pieces.archived_badge") }}</span>
-{% elif r.Concluded %}<span class="badge done">{{ t("auditions.concluded_badge") }}</span>{% endif %}
+{% elif r.Concluded %}<span class="badge done">{{ t("auditions.concluded_badge") }}</span>{% endif %}{% if r.Enrolled and not r.Archived %} <span class="badge">{{ t("auditions.enrolled_badge") }}</span>{% endif %}
 </div>
 <div class="meta">{{ dateIT(r.Date) }}</div>
 <div class="meta">{{ tp("pieces.linked", r.Pieces) }}{% if r.Links %} · {{ tp("resources.count", r.Links) }}{% endif %}</div>
