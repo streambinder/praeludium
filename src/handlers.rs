@@ -1454,7 +1454,17 @@ pub async fn handle_today(State(app): State<Shared>, headers: HeaderMap) -> Resp
     if let Err(e) = app.fill_today_plan(&mut data, &avail, &today) {
         return err500(&e);
     }
-    data.pieces = pieces.clone();
+    // The manual log list shows only pieces that belong to at least one
+    // enrolled audition; the session handler still accepts any piece.
+    let mut log_pieces = Vec::new();
+    for p in &pieces {
+        match upcoming_auditions(p, &today) {
+            Ok((upcoming, _, _)) if !upcoming.is_empty() => log_pieces.push(p.clone()),
+            Ok(_) => {}
+            Err(e) => return err500(&e),
+        }
+    }
+    data.pieces = log_pieces;
     if let Err(e) = app.stamp_today_levels(&mut data) {
         return err500(&e);
     }

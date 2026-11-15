@@ -1956,3 +1956,56 @@ async fn plan_excludes_unenrolled_and_diary_stays_open() {
         "one plan card after enroll"
     );
 }
+
+#[tokio::test]
+async fn manual_log_list_shows_enrolled_pieces_only() {
+    let (r, _app) = test_app();
+    r.clone()
+        .oneshot(form_req("/auditions", "name=Cup&date=2027-01-10&weight=4"))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/auditions",
+            "name=Plate&date=2027-02-10&weight=3",
+        ))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Bach&work=Suite&kind=solo&difficulty=3&audition=1",
+        ))
+        .await
+        .unwrap();
+    r.clone()
+        .oneshot(form_req(
+            "/pieces",
+            "composer=Haydn&work=Concerto&kind=solo&difficulty=3&audition=2",
+        ))
+        .await
+        .unwrap();
+    // Enroll only in Cup: the manual log list keeps the Cup piece
+    // and drops the Plate piece.
+    r.clone()
+        .oneshot(form_req("/auditions/1/enrollment", ""))
+        .await
+        .unwrap();
+    let resp = r.clone().oneshot(req("GET", "/")).await.unwrap();
+    let body = body_string(resp).await;
+    let form = body
+        .split_once("<form method=\"post\" action=\"/session\" class=\"checkin\">")
+        .expect("checkin form")
+        .1
+        .split_once("</form>")
+        .expect("checkin form end")
+        .0;
+    assert!(
+        form.contains("<option value=\"1\">"),
+        "enrolled piece listed"
+    );
+    assert!(
+        !form.contains("<option value=\"2\">"),
+        "unenrolled piece hidden"
+    );
+}
