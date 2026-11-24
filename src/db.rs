@@ -246,6 +246,20 @@ pub fn open_memory() -> Result<Connection> {
     Ok(db)
 }
 
+/// Test-only helper: insert the users row a direct enrollments
+/// write needs. Production enrollment goes through the toggle
+/// handler, which ensures the row itself. The name is generic:
+/// no code reads `users.name`. It is public (not `#[cfg(test)]`)
+/// because the integration tests call it too, and `#[cfg(test)]`
+/// items are invisible to them.
+pub fn ensure_test_user(db: &Connection) -> Result<()> {
+    db.execute(
+        "INSERT OR IGNORE INTO users(id, name) VALUES(?, 'Test User')",
+        params![SEEDED_USER_ID],
+    )?;
+    Ok(())
+}
+
 /// Create the schema if it is missing, and nothing else: no data
 /// writes, no renames, no column changes. A fresh database is
 /// complete from the CREATE statements alone; an existing one is

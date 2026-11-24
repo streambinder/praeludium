@@ -1247,6 +1247,7 @@ async fn today_plan_renders_segmented_items() {
             [],
         )
         .unwrap();
+        praeludium::db::ensure_test_user(&db).unwrap();
         db.execute(
             "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1), (1, 2)",
             [],
@@ -1582,6 +1583,7 @@ async fn pool_card_on_audition_page_and_prepmap() {
             [],
         )
         .unwrap();
+        praeludium::db::ensure_test_user(&db).unwrap();
         db.execute(
             "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1)",
             [],
@@ -1645,6 +1647,7 @@ async fn optional_tile_badge_audition_and_diary_scope() {
             [],
         )
         .unwrap();
+        praeludium::db::ensure_test_user(&db).unwrap();
         db.execute(
             "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1), (1, 2)",
             [],
@@ -1702,6 +1705,7 @@ async fn pool_plan_card_shared_weight_and_member_choice() {
             [],
         )
         .unwrap();
+        praeludium::db::ensure_test_user(&db).unwrap();
         db.execute(
             "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1)",
             [],
@@ -1785,6 +1789,7 @@ async fn pool_member_with_mandatory_link_planned_normally() {
             [],
         )
         .unwrap();
+        praeludium::db::ensure_test_user(&db).unwrap();
         db.execute(
             "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1), (1, 2)",
             [],
@@ -1874,6 +1879,41 @@ async fn enrollment_toggle_round_trip() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn enrollment_toggle_ensures_user_on_fresh_database() {
+    let (r, app) = test_app();
+    // A fresh database holds no users row (Phase 1).
+    let users: i64 = {
+        let db = app.db.lock().unwrap();
+        db.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))
+            .unwrap()
+    };
+    assert_eq!(users, 0, "fresh database holds no users row");
+    let audition_id = {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO auditions(name, audition_date, weight) VALUES('Fresh', '2027-03-01', 3)",
+            [],
+        )
+        .unwrap();
+        db.last_insert_rowid()
+    };
+    let resp = r
+        .clone()
+        .oneshot(form_req(
+            &format!("/auditions/{audition_id}/enrollment"),
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        enrollment_count(&app, audition_id),
+        1,
+        "one enrollments row after enroll"
+    );
 }
 
 fn enrollment_count(app: &App, audition_id: i64) -> i64 {

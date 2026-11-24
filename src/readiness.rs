@@ -378,6 +378,7 @@ mod tests {
             [],
         )
         .unwrap();
+        crate::db::ensure_test_user(&db).unwrap();
         db.execute(
             "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1)",
             [],
@@ -542,6 +543,7 @@ mod scope_tests {
             [],
         )
         .unwrap();
+        crate::db::ensure_test_user(&db).unwrap();
         db.execute(
             "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1), (1, 2)",
             [],
