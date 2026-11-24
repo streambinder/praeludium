@@ -2519,6 +2519,14 @@ pub async fn handle_toggle_enrollment(
             params![app.current_user_id, c.id],
         )
     } else {
+        // A fresh database holds no users row; the toggle ensures
+        // it before the enrollment insert, which references it.
+        if let Err(e) = db.execute(
+            "INSERT OR IGNORE INTO users(id, name) VALUES(?, '')",
+            params![app.current_user_id],
+        ) {
+            return err500(&e);
+        }
         db.execute(
             "INSERT INTO enrollments(user_id, audition_id) VALUES(?, ?)",
             params![app.current_user_id, c.id],
@@ -4756,6 +4764,7 @@ mod tests {
         )
         .unwrap();
         // The seed models an audition the user is enrolled in.
+        crate::db::ensure_test_user(&db).unwrap();
         db.execute(
             "INSERT INTO enrollments (user_id, audition_id) VALUES (?, ?)",
             params![crate::db::SEEDED_USER_ID, id],
