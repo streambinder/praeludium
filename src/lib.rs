@@ -10,5 +10,7 @@ pub mod readiness;
 pub mod recordings;
 pub mod render;
 pub mod score;
+pub mod seed;
+pub mod seed_data;
 pub mod segments;
 pub mod stats;
