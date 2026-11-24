@@ -8,15 +8,8 @@
 {% for c in Piece.Auditions %}<div class="concorso-row"><span class="chip{% if c.Archived %} muted{% endif %}">{{ c.Name }}{% if c.RoundName %}<span class="chip-round">· {{ c.RoundName }}</span>{% endif %}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% if c.Optional %}<span class="badge">{{ t("link.optional") }}</span>{% endif %}{% if c.Note %}<span class="meta">{{ t("field.note") }}: {{ c.Note }}</span>{% endif %}{% if c.SegmentLabels %}<span class="meta">{{ t("segment.parts") }}: {{ c.SegmentLabels | join(", ") }}</span>{% endif %}</div>
 {% else %}<p class="meta">{{ t("piece.none_linked") }}</p>{% endfor %}
 </div>
-<div class="row btns">
-<a class="btn" href="/pieces/{{ Piece.ID }}/edit">{{ t("common.edit") }}</a>
-{% if Piece.Archived %}
-<form method="post" action="/pieces/{{ Piece.ID }}/restore" class="inline"><input type="hidden" name="return" value="/diary/piece/{{ Piece.ID }}"><button class="secondary" type="submit">{{ t("common.restore") }}</button></form>
-{% else %}
-<form method="post" action="/pieces/{{ Piece.ID }}/archive" class="inline"><input type="hidden" name="return" value="/diary/piece/{{ Piece.ID }}"><button class="secondary" type="submit">{{ t("common.archive") }}</button></form>
-{% endif %}
 </div>
-</div>
+
 
 {% if Spark.Points %}
 <section class="panel reveal">
