@@ -379,14 +379,6 @@ fn migrate(db: &Connection) -> Result<()> {
     for s in stmts {
         db.execute_batch(s)?;
     }
-    // The users row is the one seed migrate still writes: with
-    // foreign keys on, enrollments references users(id), so the
-    // enroll toggle fails on a fresh database without it. Moving
-    // user creation out of migrate is a follow-up, not this fix.
-    db.execute(
-        "INSERT OR IGNORE INTO users(id, name) VALUES(?, 'Agnese')",
-        params![SEEDED_USER_ID],
-    )?;
     Ok(())
 }
 
@@ -1005,6 +997,11 @@ mod tests {
         let cols = table_columns(&db, "sessions").unwrap();
         assert!(cols.contains("bpm"));
         assert!(cols.contains("segment_id"));
+        // Migrate writes no data: a fresh database holds zero users rows.
+        let users: i64 = db
+            .query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(users, 0);
         drop(db);
         // A second migration pass changes nothing.
         let db = app.conn();
