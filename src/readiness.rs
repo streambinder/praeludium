@@ -371,35 +371,39 @@ mod tests {
         }
     }
 
-    fn seed(app: &App) {
+    fn seed(app: &App) -> (i64, i64, i64) {
         let db = app.db.lock().unwrap();
         db.execute(
-            "INSERT INTO auditions (id, name, audition_date) VALUES (1, 'A', '2027-01-08')",
+            "INSERT INTO auditions (name, audition_date) VALUES ('A', '2027-01-08')",
             [],
         )
         .unwrap();
+        let aid = db.last_insert_rowid();
         crate::db::ensure_test_user(&db).unwrap();
         db.execute(
-            "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1)",
-            [],
+            "INSERT INTO enrollments (user_id, audition_id) VALUES (1, ?)",
+            params![aid],
         )
         .unwrap();
         db.execute(
-            "INSERT INTO pieces (id, composer, work) VALUES (1, 'C1', 'W1'), (2, 'C2', 'W2')",
+            "INSERT INTO pieces (composer, work) VALUES ('C1', 'W1'), ('C2', 'W2')",
             [],
         )
         .unwrap();
+        let p2 = db.last_insert_rowid();
+        let p1 = p2 - 1;
         db.execute(
-            "INSERT INTO piece_audition (piece_id, audition_id) VALUES (1, 1), (2, 1)",
-            [],
+            "INSERT INTO piece_audition (piece_id, audition_id) VALUES (?, ?), (?, ?)",
+            params![p1, aid, p2, aid],
         )
         .unwrap();
         db.execute(
             "INSERT INTO sessions (date, piece_id, minutes, confidence, bpm) VALUES \
-             ('2026-10-10', 1, 30, 4, 72), ('2026-10-01', 1, 20, 3, 60)",
-            [],
+             ('2026-10-10', ?, 30, 4, 72), ('2026-10-01', ?, 20, 3, 60)",
+            params![p1, p1],
         )
         .unwrap();
+        (aid, p1, p2)
     }
 
     #[test]
@@ -429,10 +433,9 @@ mod tests {
     #[test]
     fn latest_bpm_reads_the_newest_session() {
         let app = test_app();
-        assert_eq!(app.latest_bpm(1).unwrap(), None);
-        seed(&app);
-        assert_eq!(app.latest_bpm(1).unwrap(), Some(72));
-        assert_eq!(app.latest_bpm(2).unwrap(), None);
+        let (_, p1, p2) = seed(&app);
+        assert_eq!(app.latest_bpm(p1).unwrap(), Some(72));
+        assert_eq!(app.latest_bpm(p2).unwrap(), None);
     }
 
     #[test]
@@ -446,9 +449,9 @@ mod tests {
         let row = app.readiness_coverage(&aud, "2026-01-01").unwrap();
         assert_eq!(row.pct, 0);
         assert_eq!(row.val, "");
-        seed(&app);
+        let (aid, _, _) = seed(&app);
         let aud = Audition {
-            id: 1,
+            id: aid,
             name: "A".into(),
             ..Default::default()
         };
@@ -459,11 +462,11 @@ mod tests {
     #[test]
     fn conf_rows_and_study_time_read_sessions() {
         let app = test_app();
-        seed(&app);
-        let rows = app.audition_conf_rows(1).unwrap();
+        let (aid, _, _) = seed(&app);
+        let rows = app.audition_conf_rows(aid).unwrap();
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].conf, 3);
-        let (all, week) = app.readiness_study_time(1, "2026-10-05").unwrap();
+        let (all, week) = app.readiness_study_time(aid, "2026-10-05").unwrap();
         assert_eq!(all, 50);
         assert_eq!(week, 30);
         let (all, _) = app.readiness_study_time(9, "2026-10-05").unwrap();
@@ -473,20 +476,20 @@ mod tests {
     #[test]
     fn tempo_readiness_counts_targets() {
         let app = test_app();
-        seed(&app);
+        let (_, p1, p2) = seed(&app);
         let pieces = vec![
             Piece {
-                id: 1,
+                id: p1,
                 target_bpm: Some(70),
                 ..Default::default()
             },
             Piece {
-                id: 2,
+                id: p2,
                 target_bpm: Some(80),
                 ..Default::default()
             },
             Piece {
-                id: 3,
+                id: 9999,
                 target_bpm: None,
                 ..Default::default()
             },
@@ -532,94 +535,106 @@ mod scope_tests {
     }
 
     /// Three pieces, two auditions. Piece 1: one whole-piece
-    /// session. Piece 2: segments 10 (asked by audition 1) and
-    /// 11 (asked by audition 2), one session on each. Piece 3:
-    /// segment 12 (asked by audition 1) and segment 13 (asked
-    /// by audition 2); its only session sits on segment 12.
-    fn seed_scoped(app: &App) {
+    /// session. Piece 2: segments 30 (asked by audition 1) and
+    /// 31 (asked by audition 2), one session on each. Piece 3:
+    /// segment 32 (asked by audition 1) and segment 33 (asked
+    /// by audition 2); its only session sits on segment 32.
+    fn seed_scoped(app: &App) -> (i64, i64, i64, i64, i64) {
         let db = app.db.lock().unwrap();
         db.execute(
-            "INSERT INTO auditions (id, name, audition_date) VALUES (1, 'A', '2027-01-08'), (2, 'B', '2027-02-08')",
+            "INSERT INTO auditions (name, audition_date) VALUES ('A', '2027-01-08'), ('B', '2027-02-08')",
             [],
         )
         .unwrap();
+        let a2 = db.last_insert_rowid();
+        let a1 = a2 - 1;
         crate::db::ensure_test_user(&db).unwrap();
         db.execute(
-            "INSERT INTO enrollments (user_id, audition_id) VALUES (1, 1), (1, 2)",
-            [],
+            "INSERT INTO enrollments (user_id, audition_id) VALUES (1, ?), (1, ?)",
+            params![a1, a2],
         )
         .unwrap();
         db.execute(
-            "INSERT INTO pieces (id, composer, work) VALUES (1, 'C1', 'W1'), (2, 'C2', 'W2'), (3, 'C3', 'W3')",
+            "INSERT INTO pieces (composer, work) VALUES ('C1', 'W1'), ('C2', 'W2'), ('C3', 'W3')",
             [],
         )
         .unwrap();
+        let p3 = db.last_insert_rowid();
+        let p1 = p3 - 2;
+        let p2 = p3 - 1;
         db.execute(
-            "INSERT INTO piece_audition (piece_id, audition_id) VALUES (1, 1), (2, 1), (3, 1), (1, 2), (2, 2), (3, 2)",
-            [],
+            "INSERT INTO piece_audition (piece_id, audition_id) VALUES (?, ?), (?, ?), (?, ?), (?, ?), (?, ?), (?, ?)",
+            params![p1, a1, p2, a1, p3, a1, p1, a2, p2, a2, p3, a2],
         )
         .unwrap();
         db.execute(
-            "INSERT INTO segments (id, piece_id, alias) VALUES (10, 2, 'Cadenza'), (11, 2, 'Altro'), (12, 3, 'Solo'), (13, 3, 'Altrove')",
-            [],
+            "INSERT INTO segments (id, piece_id, alias) VALUES (30, ?, 'Cadenza'), (31, ?, 'Altro'), (32, ?, 'Solo'), (33, ?, 'Altrove')",
+            params![p2, p2, p3, p3],
         )
         .unwrap();
         db.execute(
-            "INSERT INTO link_segments (piece_id, audition_id, segment_id) VALUES (2, 1, 10), (2, 2, 11), (3, 1, 12), (3, 2, 13)",
-            [],
+            "INSERT INTO link_segments (piece_id, audition_id, segment_id) VALUES (?, ?, 30), (?, ?, 31), (?, ?, 32), (?, ?, 33)",
+            params![p2, a1, p2, a2, p3, a1, p3, a2],
         )
         .unwrap();
         db.execute(
             "INSERT INTO sessions (date, piece_id, minutes, confidence, segment_id) VALUES \
-             ('2026-10-10', 1, 30, 4, NULL), ('2026-10-09', 2, 25, 5, 10), \
-             ('2026-10-11', 2, 15, 2, 11), ('2026-10-10', 3, 40, 3, 12)",
-            [],
+             ('2026-10-10', ?, 30, 4, NULL), ('2026-10-09', ?, 25, 5, 30), \
+             ('2026-10-11', ?, 15, 2, 31), ('2026-10-10', ?, 40, 3, 32)",
+            params![p1, p2, p2, p3],
         )
         .unwrap();
+        (a1, a2, p1, p2, p3)
     }
 
     #[test]
     fn readers_apply_the_link_scope() {
         let app = test_app();
-        seed_scoped(&app);
+        let (a1, a2, _, _, p3) = seed_scoped(&app);
         // Confidence rows: each audition reads the whole-piece
         // session and its own segment session, never the other
         // audition segment (no sideways credit).
-        let rows = app.audition_conf_rows(1).unwrap();
+        let rows = app.audition_conf_rows(a1).unwrap();
         assert_eq!(rows.len(), 3);
         assert_eq!(rows[0].conf, 5);
-        let rows = app.audition_conf_rows(2).unwrap();
+        let rows = app.audition_conf_rows(a2).unwrap();
         assert_eq!(rows.len(), 2);
         assert!(rows.iter().all(|r| r.conf != 5 && r.conf != 3));
         // Study time follows the same rule.
-        assert_eq!(app.readiness_study_time(1, "2026-10-05").unwrap(), (95, 95));
-        assert_eq!(app.readiness_study_time(2, "2026-10-05").unwrap(), (45, 45));
+        assert_eq!(
+            app.readiness_study_time(a1, "2026-10-05").unwrap(),
+            (95, 95)
+        );
+        assert_eq!(
+            app.readiness_study_time(a2, "2026-10-05").unwrap(),
+            (45, 45)
+        );
         // Coverage: piece 3 is touched only for audition 1.
-        let a1 = Audition {
-            id: 1,
+        let aud1 = Audition {
+            id: a1,
             name: "A".into(),
             ..Default::default()
         };
-        let a2 = Audition {
-            id: 2,
+        let aud2 = Audition {
+            id: a2,
             name: "B".into(),
             ..Default::default()
         };
         assert_eq!(
-            app.readiness_coverage(&a1, "2026-01-01").unwrap().val,
+            app.readiness_coverage(&aud1, "2026-01-01").unwrap().val,
             "3/3 · 100%"
         );
         assert_eq!(
-            app.readiness_coverage(&a2, "2026-01-01").unwrap().val,
+            app.readiness_coverage(&aud2, "2026-01-01").unwrap().val,
             "2/3 · 66%"
         );
         // Weakest: for audition 2, piece 3 earns nothing from
         // its out-of-scope session and ranks first at zero.
-        let pieces = app.list_pieces(2, "", false, "").unwrap();
-        let rows = app.readiness_weakest(2, &pieces).unwrap();
-        assert_eq!(rows[0].piece_id, 3);
+        let pieces = app.list_pieces(a2, "", false, "").unwrap();
+        let rows = app.readiness_weakest(a2, &pieces).unwrap();
+        assert_eq!(rows[0].piece_id, p3);
         assert_eq!(rows[0].prep, 0);
-        let rows = app.readiness_weakest(1, &pieces).unwrap();
+        let rows = app.readiness_weakest(a1, &pieces).unwrap();
         assert!(rows.iter().all(|r| r.prep > 0));
     }
 }

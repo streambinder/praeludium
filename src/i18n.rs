@@ -363,4 +363,9 @@ mod tests {
         assert!(tr_plural("en", "today.plan_meta", 2, &[]).starts_with('2'));
         assert_eq!(decimal("fr", 0.5), "0,5");
     }
+
+    #[test]
+    fn fmt_arg_from_int() {
+        assert!(matches!(FmtArg::from(7i64), FmtArg::Int(7)));
+    }
 }

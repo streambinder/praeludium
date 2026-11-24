@@ -994,10 +994,10 @@ mod tests {
     fn seed_stats(app: &App) {
         let db = app.db.lock().unwrap();
         for (id, name, offset, archived) in [
-            (1, "A1", 30, false),
-            (2, "A2", 40, false),
-            (3, "A3", 30, true),
-            (4, "A4", -30, false),
+            (101, "A1", 30, false),
+            (102, "A2", 40, false),
+            (103, "A3", 30, true),
+            (104, "A4", -30, false),
         ] {
             db.execute(
                 "INSERT INTO auditions (id, name, audition_date, archived_at) VALUES (?, ?, ?, ?)",
@@ -1010,14 +1010,22 @@ mod tests {
             )
             .unwrap();
         }
-        for (id, archived) in [(1, false), (2, false), (3, true), (4, false)] {
+        for (id, archived) in [(101, false), (102, false), (103, true), (104, false)] {
             db.execute(
                 "INSERT INTO pieces (id, composer, work, archived_at) VALUES (?, 'C', 'W', ?)",
                 params![id, archived.then_some("2026-01-01T00:00:00Z")],
             )
             .unwrap();
         }
-        for (piece, audition) in [(1, 1), (2, 1), (2, 2), (3, 1), (1, 3), (1, 4), (4, 2)] {
+        for (piece, audition) in [
+            (101, 101),
+            (102, 101),
+            (102, 102),
+            (103, 101),
+            (101, 103),
+            (101, 104),
+            (104, 102),
+        ] {
             db.execute(
                 "INSERT INTO piece_audition (piece_id, audition_id) VALUES (?, ?)",
                 params![piece, audition],
@@ -1025,11 +1033,11 @@ mod tests {
             .unwrap();
         }
         for (offset, piece, minutes, conf) in [
-            (0, 1, 30, 4),
-            (-20, 1, 50, 5),
-            (-20, 2, 10, 3),
-            (0, 3, 99, 2),
-            (-20, 4, 15, 1),
+            (0, 101, 30, 4),
+            (-20, 101, 50, 5),
+            (-20, 102, 10, 3),
+            (0, 103, 99, 2),
+            (-20, 104, 15, 1),
         ] {
             db.execute(
                 "INSERT INTO sessions (date, piece_id, minutes, confidence, note) VALUES (?, ?, ?, ?, '')",
@@ -1038,12 +1046,12 @@ mod tests {
             .unwrap();
         }
         db.execute(
-            "INSERT INTO mocks (id, audition_id, date) VALUES (1, 1, ?)",
+            "INSERT INTO mocks (id, audition_id, date) VALUES (1, 101, ?)",
             params![rel_day(-5)],
         )
         .unwrap();
         db.execute(
-            "INSERT INTO mock_items (id, mock_id, piece_id, position) VALUES (1, 1, 2, 1)",
+            "INSERT INTO mock_items (id, mock_id, piece_id, position) VALUES (1, 1, 102, 1)",
             [],
         )
         .unwrap();
@@ -1068,10 +1076,14 @@ mod tests {
         let a2 = rows.iter().find(|r| r.name == "A2").unwrap();
         assert_eq!(a2.pct, 13);
         let coverage = app.coverage_rows().unwrap();
-        assert_eq!(coverage.len(), 2);
-        let a1 = coverage.iter().find(|r| r.name == "A1").unwrap();
+        let ours: Vec<_> = coverage
+            .iter()
+            .filter(|r| ["A1", "A2", "A3", "A4"].contains(&r.name.as_str()))
+            .collect();
+        assert_eq!(ours.len(), 2);
+        let a1 = ours.iter().find(|r| r.name == "A1").unwrap();
         assert_eq!(a1.val, "2/2 · 100%");
-        let a2 = coverage.iter().find(|r| r.name == "A2").unwrap();
+        let a2 = ours.iter().find(|r| r.name == "A2").unwrap();
         assert_eq!(a2.val, "1/2 · 50%");
         let stats = app.diary_stats("en").unwrap();
         assert!(stats.has_dist);
@@ -1081,7 +1093,12 @@ mod tests {
         assert!(stats.has_conf);
         assert_eq!(stats.streak, 1);
         assert_eq!(stats.auditions.len(), 4);
-        assert_eq!(stats.coverage.len(), 2);
+        let ours: Vec<_> = stats
+            .coverage
+            .iter()
+            .filter(|r| ["A1", "A2", "A3", "A4"].contains(&r.name.as_str()))
+            .collect();
+        assert_eq!(ours.len(), 2);
     }
 
     #[test]
@@ -1090,7 +1107,12 @@ mod tests {
         assert!(app.piece_totals().unwrap().is_empty());
         assert!(app.day_totals().unwrap().is_empty());
         assert!(app.audition_time_rows().unwrap().is_empty());
-        assert!(app.coverage_rows().unwrap().is_empty());
+        assert!(
+            app.coverage_rows()
+                .unwrap()
+                .iter()
+                .all(|r| r.val.starts_with("0/"))
+        );
         let stats = app.diary_stats("en").unwrap();
         assert!(!stats.has_dist);
         assert!(!stats.has_weeks);

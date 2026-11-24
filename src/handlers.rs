@@ -3935,13 +3935,14 @@ mod tests {
         }
     }
 
-    fn seed_audition(app: &App, id: i64, date: &str, weight: i64) {
+    fn seed_audition(app: &App, date: &str, weight: i64) -> i64 {
         let db = app.db.lock().unwrap();
         db.execute(
-            "INSERT INTO auditions (id, name, audition_date, weight) VALUES (?, 'Aud', ?, ?)",
-            params![id, date, weight],
+            "INSERT INTO auditions (name, audition_date, weight) VALUES ('Aud', ?, ?)",
+            params![date, weight],
         )
         .unwrap();
+        let id = db.last_insert_rowid();
         // The seed models an audition the user is enrolled in.
         crate::db::ensure_test_user(&db).unwrap();
         db.execute(
@@ -3949,21 +3950,32 @@ mod tests {
             params![crate::db::SEEDED_USER_ID, id],
         )
         .unwrap();
+        id
     }
 
-    fn seed_piece(app: &App, id: i64, difficulty: i64) {
+    fn seed_piece(app: &App, difficulty: i64) -> i64 {
         let db = app.db.lock().unwrap();
         db.execute(
-            "INSERT INTO pieces (id, composer, work, difficulty) VALUES (?, 'Comp', 'Work', ?)",
-            params![id, difficulty],
+            "INSERT INTO pieces (composer, work, difficulty) VALUES ('Comp', 'Work', ?)",
+            params![difficulty],
         )
         .unwrap();
+        db.last_insert_rowid()
     }
 
     fn link(app: &App, piece: i64, audition: i64) {
         let db = app.db.lock().unwrap();
         db.execute(
             "INSERT INTO piece_audition (piece_id, audition_id) VALUES (?, ?)",
+            params![piece, audition],
+        )
+        .unwrap();
+    }
+
+    fn link_optional(app: &App, piece: i64, audition: i64) {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO piece_audition (piece_id, audition_id, optional) VALUES (?, ?, 1)",
             params![piece, audition],
         )
         .unwrap();
@@ -4038,21 +4050,21 @@ mod tests {
     #[test]
     fn or_404_and_valued_ids() {
         let app = test_app();
-        seed_audition(&app, 1, "2027-01-08", 3);
-        seed_piece(&app, 1, 3);
-        seed_piece(&app, 2, 3);
-        assert!(app.piece_or_404("1").is_ok());
+        let a1 = seed_audition(&app, "2027-01-08", 3);
+        let p1 = seed_piece(&app, 3);
+        let p2 = seed_piece(&app, 3);
+        assert!(app.piece_or_404(&p1.to_string()).is_ok());
         assert!(app.piece_or_404("abc").is_err());
         assert!(app.piece_or_404("999").is_err());
-        assert!(app.audition_or_404("1").is_ok());
+        assert!(app.audition_or_404(&a1.to_string()).is_ok());
         assert!(app.audition_or_404("0").is_err());
         assert!(app.audition_or_404("999").is_err());
         assert!(app.valued_piece_ids().unwrap().is_empty());
-        seed_session(&app, "2026-10-19", 1, 0, 0, "baseline");
-        seed_session(&app, "2026-10-19", 2, 10, 0, "");
+        seed_session(&app, "2026-10-19", p1, 0, 0, "baseline");
+        seed_session(&app, "2026-10-19", p2, 10, 0, "");
         let valued = app.valued_piece_ids().unwrap();
-        assert!(valued.contains(&1));
-        assert!(valued.contains(&2));
+        assert!(valued.contains(&p1));
+        assert!(valued.contains(&p2));
     }
 
     // ---------- coverage batch: plan machinery ----------
@@ -4122,21 +4134,21 @@ mod tests {
     #[test]
     fn score_piece_and_build_plan() {
         let app = test_app();
-        seed_audition(&app, 1, "2026-11-01", 4);
-        seed_audition(&app, 2, "2026-01-01", 4);
-        seed_piece(&app, 1, 3);
-        seed_piece(&app, 2, 2);
-        link(&app, 1, 1);
-        link(&app, 2, 2);
+        let a1 = seed_audition(&app, "2026-11-01", 4);
+        let a2 = seed_audition(&app, "2026-01-01", 4);
+        let p1 = seed_piece(&app, 3);
+        let p2 = seed_piece(&app, 2);
+        link(&app, p1, a1);
+        link(&app, p2, a2);
         let coeffs = app.get_coeffs().unwrap();
         let plan = app.build_plan("2026-10-20").unwrap();
         assert_eq!(plan.len(), 1);
-        assert_eq!(plan[0].piece.id, 1);
+        assert_eq!(plan[0].piece.id, p1);
         assert!(!plan[0].conf_rated);
         assert_eq!(plan[0].conf, 2.5);
         assert!(plan[0].since_never);
-        let p = app.get_piece(1).unwrap();
-        seed_session(&app, "2026-10-18", 1, 25, 4, "");
+        let p = app.get_piece(p1).unwrap();
+        seed_session(&app, "2026-10-18", p1, 25, 4, "");
         let item = app
             .score_piece(&p, "2026-10-20", coeffs, false)
             .unwrap()
@@ -4144,7 +4156,7 @@ mod tests {
         assert!(item.conf_rated);
         assert_eq!(item.conf, 4.0);
         assert_eq!(item.since, 2);
-        seed_session(&app, "2026-10-20", 1, 0, 0, "skipped");
+        seed_session(&app, "2026-10-20", p1, 0, 0, "skipped");
         assert!(
             app.score_piece(&p, "2026-10-20", coeffs, false)
                 .unwrap()
@@ -4155,7 +4167,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(!item.practiced);
-        seed_session(&app, "2026-10-20", 1, 15, 0, "");
+        seed_session(&app, "2026-10-20", p1, 15, 0, "");
         let item = app
             .score_piece(&p, "2026-10-20", coeffs, true)
             .unwrap()
@@ -4167,29 +4179,29 @@ mod tests {
     #[test]
     fn build_plan_groups_by_segment_scope() {
         let app = test_app();
-        seed_audition(&app, 1, "2026-11-01", 4);
-        seed_audition(&app, 2, "2026-11-15", 3);
-        seed_audition(&app, 3, "2026-12-01", 2);
-        seed_piece(&app, 1, 3);
-        link(&app, 1, 1);
-        link(&app, 1, 2);
-        link(&app, 1, 3);
+        let a1 = seed_audition(&app, "2026-11-01", 4);
+        let a2 = seed_audition(&app, "2026-11-15", 3);
+        let a3 = seed_audition(&app, "2026-12-01", 2);
+        let p1 = seed_piece(&app, 3);
+        link(&app, p1, a1);
+        link(&app, p1, a2);
+        link(&app, p1, a3);
         {
             let db = app.db.lock().unwrap();
             db.execute(
-                "INSERT INTO segments (id, piece_id, alias) VALUES (10, 1, 'Cadenza'), (11, 1, 'Finale')",
-                [],
+                "INSERT INTO segments (id, piece_id, alias) VALUES (30, ?, 'Cadenza'), (31, ?, 'Finale')",
+                params![p1, p1],
             )
             .unwrap();
             db.execute(
-                "INSERT INTO link_segments (piece_id, audition_id, segment_id) VALUES (1, 1, 10), (1, 2, 10), (1, 3, 11)",
-                [],
+                "INSERT INTO link_segments (piece_id, audition_id, segment_id) VALUES (?, ?, 30), (?, ?, 30), (?, ?, 31)",
+                params![p1, a1, p1, a2, p1, a3],
             )
             .unwrap();
             db.execute(
                 "INSERT INTO sessions (date, piece_id, minutes, confidence, note, segment_id) VALUES \
-                 ('2026-10-18', 1, 20, 5, '', 10), ('2026-10-19', 1, 10, 1, '', 11), ('2026-10-10', 1, 5, 3, '', NULL)",
-                [],
+                 ('2026-10-18', ?, 20, 5, '', 30), ('2026-10-19', ?, 10, 1, '', 31), ('2026-10-10', ?, 5, 3, '', NULL)",
+                params![p1, p1, p1],
             )
             .unwrap();
         }
@@ -4199,7 +4211,7 @@ mod tests {
         assert_eq!(plan.len(), 2);
         let a = plan
             .iter()
-            .find(|it| it.segments.len() == 1 && it.segments[0].id == 10)
+            .find(|it| it.segments.len() == 1 && it.segments[0].id == 30)
             .unwrap();
         assert_eq!(a.upcoming.len(), 2);
         assert_eq!(a.base, 7.0);
@@ -4210,7 +4222,7 @@ mod tests {
         assert_eq!(a.since, 2);
         let b = plan
             .iter()
-            .find(|it| it.segments.len() == 1 && it.segments[0].id == 11)
+            .find(|it| it.segments.len() == 1 && it.segments[0].id == 31)
             .unwrap();
         assert_eq!(b.upcoming.len(), 1);
         assert_eq!(b.base, 2.0);
@@ -4219,7 +4231,7 @@ mod tests {
         // A whole-piece session counts toward every scope: it
         // is older than both segment sessions here, so it moves
         // neither confidence. Logging one today practices both.
-        seed_session(&app, "2026-10-20", 1, 15, 0, "");
+        seed_session(&app, "2026-10-20", p1, 15, 0, "");
         let plan = app.build_plan("2026-10-20").unwrap();
         assert!(plan.iter().all(|it| it.practiced && it.logged == 15));
     }
@@ -4227,19 +4239,19 @@ mod tests {
     #[test]
     fn audition_readiness_rows() {
         let app = test_app();
-        seed_audition(&app, 1, "2026-01-01", 3);
-        seed_audition(&app, 2, "2027-01-08", 3);
-        seed_audition(&app, 3, "2027-02-01", 3);
-        seed_piece(&app, 1, 3);
-        link(&app, 1, 2);
+        seed_audition(&app, "2026-01-01", 3);
+        let a2 = seed_audition(&app, "2027-01-08", 3);
+        seed_audition(&app, "2027-02-01", 3);
+        let p1 = seed_piece(&app, 3);
+        link(&app, p1, a2);
         let pieces = vec![Piece {
-            id: 1,
-            auditions: vec![audition(2, "2027-01-08", 3)],
+            id: p1,
+            auditions: vec![audition(a2, "2027-01-08", 3)],
             ..Default::default()
         }];
         let rows = app.audition_readiness("2026-10-20", &pieces, "en").unwrap();
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].id, 2);
+        assert_eq!(rows[0].id, a2);
         assert_eq!(rows[0].pieces, 1);
     }
 
@@ -4341,22 +4353,22 @@ mod tests {
     #[test]
     fn forecaster_snapshots_inputs() {
         let app = test_app();
-        seed_audition(&app, 1, "2026-11-01", 4);
-        seed_audition(&app, 2, "2026-01-01", 4);
-        seed_piece(&app, 1, 3);
-        seed_piece(&app, 2, 2);
-        seed_piece(&app, 3, 1);
-        link(&app, 1, 1);
-        link(&app, 2, 2);
-        link(&app, 3, 1);
-        seed_session(&app, "2026-10-18", 1, 25, 4, "");
-        seed_session(&app, "2026-10-19", 1, 10, 0, "");
+        let a1 = seed_audition(&app, "2026-11-01", 4);
+        let a2 = seed_audition(&app, "2026-01-01", 4);
+        let p1 = seed_piece(&app, 3);
+        let p2 = seed_piece(&app, 2);
+        let p3 = seed_piece(&app, 1);
+        link(&app, p1, a1);
+        link(&app, p2, a2);
+        link(&app, p3, a1);
+        seed_session(&app, "2026-10-18", p1, 25, 4, "");
+        seed_session(&app, "2026-10-19", p1, 10, 0, "");
         let f = app.new_plan_forecaster("2026-10-20").unwrap();
         assert_eq!(f.inputs.len(), 2);
-        let one = f.inputs.iter().find(|i| i.id == 1).unwrap();
+        let one = f.inputs.iter().find(|i| i.id == p1).unwrap();
         assert_eq!(one.conf, 4.0);
         assert_eq!(one.last, "2026-10-19");
-        let three = f.inputs.iter().find(|i| i.id == 3).unwrap();
+        let three = f.inputs.iter().find(|i| i.id == p3).unwrap();
         assert_eq!(three.conf, 2.5);
         assert_eq!(three.last, "");
     }
@@ -4364,18 +4376,18 @@ mod tests {
     #[test]
     fn upload_mock_item_ownership() {
         let app = test_app();
-        seed_audition(&app, 1, "2027-01-08", 3);
-        seed_piece(&app, 1, 3);
-        seed_piece(&app, 2, 3);
+        let a1 = seed_audition(&app, "2027-01-08", 3);
+        let p1 = seed_piece(&app, 3);
+        let p2 = seed_piece(&app, 3);
         let db = app.db.lock().unwrap();
         db.execute(
-            "INSERT INTO mocks (id, audition_id, date) VALUES (1, 1, '2026-10-20')",
-            [],
+            "INSERT INTO mocks (id, audition_id, date) VALUES (1, ?, '2026-10-20')",
+            params![a1],
         )
         .unwrap();
         db.execute(
-            "INSERT INTO mock_items (id, mock_id, piece_id, position) VALUES (1, 1, 1, 1), (2, 1, 2, 2)",
-            [],
+            "INSERT INTO mock_items (id, mock_id, piece_id, position) VALUES (1, 1, ?, 1), (2, 1, ?, 2)",
+            params![p1, p2],
         )
         .unwrap();
         drop(db);
@@ -4384,12 +4396,12 @@ mod tests {
             m.insert("mock_item_id".to_string(), v.to_string());
             m
         };
-        assert_eq!(upload_mock_item(&app, &fields(" 1 "), 1), Some(1));
-        assert_eq!(upload_mock_item(&app, &fields("2"), 1), None);
-        assert_eq!(upload_mock_item(&app, &fields("x"), 1), None);
-        assert_eq!(upload_mock_item(&app, &fields(""), 1), None);
-        assert_eq!(upload_mock_item(&app, &fields("99"), 1), None);
-        assert_eq!(upload_mock_item(&app, &HashMap::new(), 1), None);
+        assert_eq!(upload_mock_item(&app, &fields(" 1 "), p1), Some(1));
+        assert_eq!(upload_mock_item(&app, &fields("2"), p1), None);
+        assert_eq!(upload_mock_item(&app, &fields("x"), p1), None);
+        assert_eq!(upload_mock_item(&app, &fields(""), p1), None);
+        assert_eq!(upload_mock_item(&app, &fields("99"), p1), None);
+        assert_eq!(upload_mock_item(&app, &HashMap::new(), p1), None);
     }
 
     // ---------- coverage batch: today plan sections ----------
@@ -4411,23 +4423,23 @@ mod tests {
     #[test]
     fn auto_skip_drops_the_tail() {
         let app = test_app();
-        seed_piece(&app, 1, 3);
-        seed_piece(&app, 2, 3);
-        seed_piece(&app, 3, 3);
+        let p1 = seed_piece(&app, 3);
+        let p2 = seed_piece(&app, 3);
+        let p3 = seed_piece(&app, 3);
         let items = vec![
-            plan_item(1, 60, false),
-            plan_item(2, 60, false),
-            plan_item(3, 60, false),
+            plan_item(p1, 60, false),
+            plan_item(p2, 60, false),
+            plan_item(p3, 60, false),
         ];
         let kept = app
             .auto_skip_overflow(items, 60, AUTO_SKIP_GRACE_MIN, "2026-10-20")
             .unwrap();
         assert_eq!(kept.len(), 1);
-        assert_eq!(kept[0].piece.id, 1);
+        assert_eq!(kept[0].piece.id, p1);
         let marks = app.skip_markers_today("2026-10-20").unwrap();
-        assert_eq!(marks.get(&3), Some(&true));
-        assert_eq!(marks.get(&2), Some(&true));
-        let items = vec![plan_item(1, 60, true), plan_item(2, 60, false)];
+        assert_eq!(marks.get(&p3), Some(&true));
+        assert_eq!(marks.get(&p2), Some(&true));
+        let items = vec![plan_item(p1, 60, true), plan_item(p2, 60, false)];
         let kept = app
             .auto_skip_overflow(items, 0, AUTO_SKIP_GRACE_MIN, "2026-10-20")
             .unwrap();
@@ -4454,9 +4466,9 @@ mod tests {
         };
         app.fill_today_plan(&mut data, &[], "2026-10-20").unwrap();
         assert!(data.no_budget);
-        seed_audition(&app, 1, "2026-11-01", 4);
-        seed_piece(&app, 1, 3);
-        link(&app, 1, 1);
+        let a1 = seed_audition(&app, "2026-11-01", 4);
+        let p1 = seed_piece(&app, 3);
+        link(&app, p1, a1);
         let avail = vec![Availability {
             start_min: 0,
             end_min: 1439,
@@ -4478,34 +4490,34 @@ mod tests {
     #[test]
     fn today_sections_fill() {
         let app = test_app();
-        seed_piece(&app, 1, 3);
-        seed_piece(&app, 2, 3);
-        seed_piece(&app, 3, 3);
-        seed_piece(&app, 4, 3);
-        seed_session(&app, "2026-10-20", 1, 0, 0, "skipped");
-        seed_session(&app, "2026-10-20", 2, 0, 0, "auto-skipped");
-        seed_session(&app, "2026-10-20", 3, 0, 0, "skipped");
-        seed_session(&app, "2026-10-20", 3, 0, 0, "auto-skipped");
-        seed_session(&app, "2026-10-20", 4, 45, 3, "");
+        let p1 = seed_piece(&app, 3);
+        let p2 = seed_piece(&app, 3);
+        let p3 = seed_piece(&app, 3);
+        let p4 = seed_piece(&app, 3);
+        seed_session(&app, "2026-10-20", p1, 0, 0, "skipped");
+        seed_session(&app, "2026-10-20", p2, 0, 0, "auto-skipped");
+        seed_session(&app, "2026-10-20", p3, 0, 0, "skipped");
+        seed_session(&app, "2026-10-20", p3, 0, 0, "auto-skipped");
+        seed_session(&app, "2026-10-20", p4, 45, 3, "");
         let marks = app.skip_markers_today("2026-10-20").unwrap();
-        assert_eq!(marks.get(&1), Some(&false));
-        assert_eq!(marks.get(&2), Some(&true));
-        assert_eq!(marks.get(&3), Some(&false));
+        assert_eq!(marks.get(&p1), Some(&false));
+        assert_eq!(marks.get(&p2), Some(&true));
+        assert_eq!(marks.get(&p3), Some(&false));
         let pieces = vec![
             Piece {
-                id: 1,
+                id: p1,
                 ..Default::default()
             },
             Piece {
-                id: 2,
+                id: p2,
                 ..Default::default()
             },
             Piece {
-                id: 3,
+                id: p3,
                 ..Default::default()
             },
             Piece {
-                id: 4,
+                id: p4,
                 ..Default::default()
             },
         ];
@@ -4520,7 +4532,7 @@ mod tests {
         assert!(!data.skipped[0].auto);
         assert!(!data.skipped[1].auto);
         assert!(data.skipped[2].auto);
-        assert_eq!(data.skipped[2].p.id, 2);
+        assert_eq!(data.skipped[2].p.id, p2);
         app.stamp_today_levels(&mut data).unwrap();
     }
 
@@ -4568,5 +4580,68 @@ mod tests {
         sort_skipped(&mut entries);
         assert!(!entries[0].auto);
         assert!(entries[1].auto);
+    }
+
+    #[test]
+    fn pool_plan_scores_count_member_sessions() {
+        let app = test_app();
+        let aid = seed_audition(&app, "2026-11-10", 4);
+        let p1 = seed_piece(&app, 3);
+        let p2 = seed_piece(&app, 3);
+        let p3 = seed_piece(&app, 3);
+        link_optional(&app, p1, aid);
+        link_optional(&app, p2, aid);
+        link_optional(&app, p3, aid);
+        {
+            let db = app.db.lock().unwrap();
+            db.execute(
+                "INSERT INTO segments (id, piece_id, alias) VALUES (30, ?, 'Cadenza')",
+                params![p1],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO link_segments (piece_id, audition_id, segment_id) VALUES (?, ?, 30)",
+                params![p1, aid],
+            )
+            .unwrap();
+        }
+        // Two study sessions for the first member: the first sets
+        // the recency, the second takes the running-minimum arm,
+        // and the one dated today practices the pool.
+        seed_session(&app, "2026-10-18", p1, 20, 4, "");
+        seed_session(&app, "2026-10-20", p1, 20, 5, "");
+        // A third member skipped today leaves the pool.
+        seed_session(&app, "2026-10-20", p3, 0, 0, "skipped");
+        let plan = app.build_plan("2026-10-20").unwrap();
+        let pool = plan
+            .iter()
+            .find(|it| !it.pool.is_empty())
+            .expect("pool item");
+        assert_eq!(pool.base, 4.0);
+        assert!(pool.practiced);
+        assert_eq!(pool.pool.len(), 2);
+        assert!(pool.segments.iter().any(|s| s.id == 30));
+    }
+
+    #[test]
+    fn auto_skip_drops_pool_members_with_the_victim() {
+        let app = test_app();
+        let p1 = seed_piece(&app, 3);
+        let p2 = seed_piece(&app, 3);
+        let p3 = seed_piece(&app, 3);
+        let mut victim = plan_item(p1, 60, false);
+        victim.pool = vec![Piece {
+            id: p2,
+            ..Default::default()
+        }];
+        let items = vec![plan_item(p3, 60, true), victim];
+        let kept = app
+            .auto_skip_overflow(items, 0, AUTO_SKIP_GRACE_MIN, "2026-10-20")
+            .unwrap();
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].piece.id, p3);
+        let marks = app.skip_markers_today("2026-10-20").unwrap();
+        assert_eq!(marks.get(&p1), Some(&true));
+        assert_eq!(marks.get(&p2), Some(&true));
     }
 }

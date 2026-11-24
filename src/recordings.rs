@@ -254,4 +254,17 @@ mod tests {
         assert_eq!(rows[0].date_label, "14/10/2026");
         assert_eq!(rows[0].duration_label, "1:15");
     }
+
+    #[test]
+    fn recording_content_type_by_extension() {
+        assert_eq!(recording_content_type("take.webm"), "audio/webm");
+        assert_eq!(recording_content_type("take.ogg"), "audio/ogg");
+        assert_eq!(recording_content_type("take.mp4"), "audio/mp4");
+        assert_eq!(recording_content_type("take.mp3"), "audio/mpeg");
+        assert_eq!(recording_content_type("take.wav"), "audio/wav");
+        assert_eq!(
+            recording_content_type("take.unknown"),
+            "application/octet-stream"
+        );
+    }
 }

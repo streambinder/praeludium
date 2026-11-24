@@ -956,3 +956,354 @@ fn compare_link_segments(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{SEEDED_USER_ID, ensure_test_user, open_db, open_memory};
+    use crate::seed_data::SEED;
+
+    fn count(db: &Connection, table: &str) -> i64 {
+        db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+            .unwrap()
+    }
+
+    /// Canonical text dump of every table the seed and the user
+    /// data touch, one row per line, in primary-key order.
+    fn dump(db: &Connection) -> String {
+        let tables: &[(&str, &str)] = &[
+            ("auditions", "id"),
+            ("pieces", "id"),
+            ("audition_rounds", "id"),
+            ("audition_links", "id"),
+            ("piece_audition", "piece_id, audition_id"),
+            ("segments", "id"),
+            ("link_segments", "piece_id, audition_id, segment_id"),
+            ("users", "id"),
+            ("enrollments", "user_id, audition_id"),
+            ("sessions", "id"),
+        ];
+        let mut out = String::new();
+        for (table, order) in tables {
+            out.push_str(table);
+            out.push('\n');
+            let mut stmt = db
+                .prepare(&format!("SELECT * FROM {table} ORDER BY {order}"))
+                .unwrap();
+            let cols = stmt.column_count();
+            let rows = stmt
+                .query_map([], |row| {
+                    let mut vals = Vec::new();
+                    for i in 0..cols {
+                        vals.push(format!(
+                            "{:?}",
+                            row.get::<_, rusqlite::types::Value>(i).unwrap()
+                        ));
+                    }
+                    Ok(vals.join("|"))
+                })
+                .unwrap();
+            for row in rows {
+                out.push_str(&row.unwrap());
+                out.push('\n');
+            }
+        }
+        out
+    }
+
+    fn temp_path(tag: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("praeludium-seed-{tag}-{}.db", std::process::id()))
+    }
+
+    fn cleanup(path: &std::path::Path) {
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}-wal", path.display()));
+        let _ = std::fs::remove_file(format!("{}-shm", path.display()));
+    }
+
+    /// 5.1: a fresh database holds the seed, with the IDs of the dump.
+    #[test]
+    fn fresh_database_holds_the_seed() {
+        let db = open_memory().unwrap();
+        assert_eq!(count(&db, "auditions"), 6);
+        assert_eq!(count(&db, "audition_links"), 18);
+        assert_eq!(count(&db, "audition_rounds"), 13);
+        assert_eq!(count(&db, "pieces"), 45);
+        assert_eq!(count(&db, "piece_audition"), 85);
+        assert_eq!(count(&db, "segments"), 25);
+        assert_eq!(count(&db, "link_segments"), 30);
+        assert_eq!(count(&db, "users"), 0);
+        assert_eq!(count(&db, "enrollments"), 0);
+        let composer: String = db
+            .query_row("SELECT composer FROM pieces WHERE id=1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(composer, "Beethoven");
+        let name: String = db
+            .query_row("SELECT name FROM auditions WHERE id=6", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(name, "La Fenice — Violoncello di fila");
+        let diff = compare_seed(&db, &SEED).unwrap();
+        assert_eq!(diff.missing(), 0);
+        assert_eq!(diff.extra(), 0);
+        assert_eq!(diff.different(), 0);
+    }
+
+    /// 5.2: a file database opened twice yields an identical dump.
+    #[test]
+    fn second_open_changes_nothing() {
+        let path = temp_path("second-open");
+        cleanup(&path);
+        let first = {
+            let db = open_db(&path).unwrap();
+            let dump = dump(&db);
+            drop(db);
+            dump
+        };
+        let db = open_db(&path).unwrap();
+        let second = dump(&db);
+        drop(db);
+        cleanup(&path);
+        assert_eq!(first, second);
+    }
+
+    /// 5.3: an overwrite is reported and applied on reopen.
+    #[test]
+    fn overwrite_is_reported_and_applied() {
+        let path = temp_path("overwrite");
+        cleanup(&path);
+        let mut db = open_db(&path).unwrap();
+        db.execute("UPDATE pieces SET difficulty=1 WHERE id=1", [])
+            .unwrap();
+        let report = apply_seed(&mut db, &SEED).unwrap();
+        assert_eq!(report.pieces.updated, 1);
+        assert_eq!(report.pieces.overwritten, vec!["1".to_string()]);
+        let difficulty: i64 = db
+            .query_row("SELECT difficulty FROM pieces WHERE id=1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(difficulty, 4);
+        drop(db);
+        let db = open_db(&path).unwrap();
+        let difficulty: i64 = db
+            .query_row("SELECT difficulty FROM pieces WHERE id=1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(difficulty, 4);
+        let diff = compare_seed(&db, &SEED).unwrap();
+        assert_eq!(diff.different(), 0);
+        drop(db);
+        cleanup(&path);
+    }
+
+    /// 5.4: a row the seed does not hold stays and is reported.
+    #[test]
+    fn extra_row_stays_and_is_reported() {
+        let path = temp_path("extra-row");
+        cleanup(&path);
+        {
+            let db = open_db(&path).unwrap();
+            db.execute(
+                "INSERT INTO auditions(id, name, city, audition_date, weight)
+                VALUES(7, 'Extra', '', '2027-03-01', 2)",
+                [],
+            )
+            .unwrap();
+        }
+        let db = open_db(&path).unwrap();
+        let name: String = db
+            .query_row("SELECT name FROM auditions WHERE id=7", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(name, "Extra");
+        assert_eq!(count(&db, "auditions"), 7);
+        let diff = compare_seed(&db, &SEED).unwrap();
+        assert_eq!(diff.auditions.extra, vec!["7".to_string()]);
+        drop(db);
+        cleanup(&path);
+    }
+
+    /// 5.5: sessions and enrollments survive a reopen.
+    #[test]
+    fn sessions_and_enrollments_survive() {
+        let path = temp_path("user-data");
+        cleanup(&path);
+        let session_id = {
+            let db = open_db(&path).unwrap();
+            ensure_test_user(&db).unwrap();
+            db.execute(
+                "INSERT INTO sessions(date, piece_id, minutes, confidence, note)
+                VALUES('2026-11-20', 1, 30, 4, 'kept')",
+                [],
+            )
+            .unwrap();
+            let id = db.last_insert_rowid();
+            db.execute(
+                "INSERT INTO enrollments(user_id, audition_id) VALUES(?, 1)",
+                params![SEEDED_USER_ID],
+            )
+            .unwrap();
+            drop(db);
+            id
+        };
+        let db = open_db(&path).unwrap();
+        let (piece, minutes, confidence, note): (i64, i64, i64, String) = db
+            .query_row(
+                "SELECT piece_id, minutes, confidence, note FROM sessions WHERE id=?",
+                params![session_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!((piece, minutes, confidence), (1, 30, 4));
+        assert_eq!(note, "kept");
+        assert_eq!(count(&db, "sessions"), 1);
+        let enrolled: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM enrollments WHERE user_id=? AND audition_id=1",
+                params![SEEDED_USER_ID],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(enrolled, 1);
+        drop(db);
+        cleanup(&path);
+    }
+
+    /// 5.7: a seed addition through a custom instance applies
+    /// once, and a second apply changes nothing.
+    #[test]
+    fn seed_addition_through_a_custom_instance() {
+        static EXTRA_AUDITIONS: &[SeedAudition] = &[SeedAudition {
+            id: 7,
+            name: "Extra",
+            city: "",
+            date: "2027-03-01",
+            weight: 2,
+            archived_at: None,
+        }];
+        let extra = SeedData {
+            auditions: EXTRA_AUDITIONS,
+            ..Default::default()
+        };
+        let mut db = open_memory().unwrap();
+        let first = apply_seed(&mut db, &extra).unwrap();
+        assert_eq!(first.auditions.inserted, 1);
+        assert_eq!(count(&db, "auditions"), 7);
+        let second = apply_seed(&mut db, &extra).unwrap();
+        assert_eq!(second.auditions.inserted, 0);
+        assert_eq!(second.auditions.updated, 0);
+        assert_eq!(second.auditions.unchanged, 1);
+        let name: String = db
+            .query_row("SELECT name FROM auditions WHERE id=7", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(name, "Extra");
+        assert_eq!(count(&db, "pieces"), 45);
+    }
+
+    /// Every table, one row deleted and one row changed: the
+    /// comparison reports the missing and the different rows,
+    /// and a seed application restores them and reports the
+    /// overwrites.
+    #[test]
+    fn comparison_and_overwrite_cover_every_table() {
+        let mut db = open_memory().unwrap();
+        db.execute("DELETE FROM auditions WHERE id=2", []).unwrap();
+        db.execute("DELETE FROM pieces WHERE id=45", []).unwrap();
+        db.execute("DELETE FROM audition_rounds WHERE id=1", [])
+            .unwrap();
+        db.execute("DELETE FROM audition_links WHERE id=1", [])
+            .unwrap();
+        db.execute(
+            "DELETE FROM piece_audition WHERE piece_id=29 AND audition_id=3",
+            [],
+        )
+        .unwrap();
+        db.execute("DELETE FROM segments WHERE id=1", []).unwrap();
+        db.execute(
+            "DELETE FROM link_segments WHERE piece_id=25 AND audition_id=1 AND segment_id=22",
+            [],
+        )
+        .unwrap();
+        db.execute("UPDATE auditions SET weight=weight+100 WHERE id=1", [])
+            .unwrap();
+        db.execute("UPDATE pieces SET difficulty=difficulty+100 WHERE id=2", [])
+            .unwrap();
+        db.execute("UPDATE audition_rounds SET name=name || 'x' WHERE id=2", [])
+            .unwrap();
+        db.execute(
+            "UPDATE audition_links SET label=label || 'x' WHERE id=2",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "UPDATE piece_audition SET note=note || 'x' WHERE piece_id=30 AND audition_id=3",
+            [],
+        )
+        .unwrap();
+        db.execute("UPDATE segments SET alias=alias || 'x' WHERE id=2", [])
+            .unwrap();
+        let diff = compare_seed(&db, &SEED).unwrap();
+        assert!(diff.auditions.missing.contains(&"2".to_string()));
+        assert!(diff.pieces.missing.contains(&"45".to_string()));
+        assert!(diff.rounds.missing.contains(&"1".to_string()));
+        assert!(diff.links.missing.contains(&"1".to_string()));
+        assert!(diff.piece_auditions.missing.contains(&"29:3".to_string()));
+        assert!(diff.segments.missing.contains(&"1".to_string()));
+        assert!(diff.link_segments.missing.contains(&"25:1:22".to_string()));
+        assert!(diff.auditions.different.contains(&"1".to_string()));
+        assert!(diff.pieces.different.contains(&"2".to_string()));
+        assert!(diff.rounds.different.contains(&"2".to_string()));
+        assert!(diff.links.different.contains(&"2".to_string()));
+        assert!(diff.piece_auditions.different.contains(&"30:3".to_string()));
+        assert!(diff.segments.different.contains(&"2".to_string()));
+        let report = apply_seed(&mut db, &SEED).unwrap();
+        assert_eq!(report.auditions.updated, 1);
+        assert_eq!(report.pieces.updated, 1);
+        assert_eq!(report.rounds.updated, 1);
+        assert_eq!(report.links.updated, 1);
+        assert_eq!(report.piece_auditions.updated, 1);
+        assert_eq!(report.segments.updated, 1);
+        assert_eq!(report.auditions.overwritten, vec!["1".to_string()]);
+        assert_eq!(report.pieces.overwritten, vec!["2".to_string()]);
+        assert_eq!(report.rounds.overwritten, vec!["2".to_string()]);
+        assert_eq!(report.links.overwritten, vec!["2".to_string()]);
+        assert_eq!(report.piece_auditions.overwritten, vec!["30:3".to_string()]);
+        assert_eq!(report.segments.overwritten, vec!["2".to_string()]);
+        assert!(report.auditions.inserted >= 1);
+        assert!(report.pieces.inserted >= 1);
+        assert!(report.rounds.inserted >= 1);
+        assert!(report.links.inserted >= 1);
+        assert!(report.piece_auditions.inserted >= 1);
+        assert!(report.segments.inserted >= 1);
+        assert!(report.link_segments.inserted >= 1);
+        let clean = compare_seed(&db, &SEED).unwrap();
+        assert_eq!(clean.missing(), 0);
+        assert_eq!(clean.extra(), 0);
+        assert_eq!(clean.different(), 0);
+    }
+
+    /// 5.9: `created_at` survives an overwrite of a seeded row.
+    #[test]
+    fn created_at_survives_an_overwrite() {
+        let path = temp_path("created-at");
+        cleanup(&path);
+        let created = {
+            let db = open_db(&path).unwrap();
+            let created: String = db
+                .query_row("SELECT created_at FROM pieces WHERE id=1", [], |r| r.get(0))
+                .unwrap();
+            db.execute("UPDATE pieces SET difficulty=1 WHERE id=1", [])
+                .unwrap();
+            drop(db);
+            created
+        };
+        let db = open_db(&path).unwrap();
+        let (difficulty, kept): (i64, String) = db
+            .query_row(
+                "SELECT difficulty, created_at FROM pieces WHERE id=1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(difficulty, 4);
+        assert_eq!(kept, created);
+        drop(db);
+        cleanup(&path);
+    }
+}

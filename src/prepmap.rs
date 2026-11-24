@@ -603,4 +603,84 @@ mod tests {
         assert_eq!(prep_level_from_score(0.5), 3);
         assert_eq!(prep_level_from_score(1.0), 4);
     }
+
+    fn test_app() -> App {
+        App {
+            db: std::sync::Mutex::new(crate::db::open_memory().unwrap()),
+            data_dir: std::path::PathBuf::from("/tmp"),
+            current_user_id: crate::db::SEEDED_USER_ID,
+        }
+    }
+
+    #[test]
+    fn prep_score_caps_recency() {
+        let sessions = vec![
+            session("2026-10-13", 60, 5),
+            session("2026-10-12", 60, 5),
+            session("2026-10-11", 60, 5),
+            session("2026-10-10", 60, 5),
+        ];
+        let (score, level, _avg, rated) = prep_score(1, &sessions, day("2026-10-14"));
+        assert!(rated);
+        assert!((score - 1.0).abs() < 1e-9);
+        assert_eq!(level, 4);
+    }
+
+    #[test]
+    fn apply_decay_keeps_score_on_unparsable_date() {
+        let sessions = vec![session("not-a-date", 60, 5)];
+        assert!((apply_decay(0.8, &sessions, day("2026-10-14")) - 0.8).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn pool_tile_with_rated_member_shows_confidence() {
+        let app = test_app();
+        let (aid, p1, p2) = {
+            let db = app.db.lock().unwrap();
+            db.execute(
+                "INSERT INTO auditions (name, audition_date, weight) VALUES ('Pool', '2026-11-10', 4)",
+                [],
+            )
+            .unwrap();
+            let aid = db.last_insert_rowid();
+            crate::db::ensure_test_user(&db).unwrap();
+            db.execute(
+                "INSERT INTO enrollments (user_id, audition_id) VALUES (?, ?)",
+                rusqlite::params![crate::db::SEEDED_USER_ID, aid],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO pieces (composer, work, difficulty) VALUES ('Comp', 'One', 3), ('Comp', 'Two', 3)",
+                [],
+            )
+            .unwrap();
+            let p2 = db.last_insert_rowid();
+            let p1 = p2 - 1;
+            db.execute(
+                "INSERT INTO piece_audition (piece_id, audition_id, optional) VALUES (?, ?, 1), (?, ?, 1)",
+                rusqlite::params![p1, aid, p2, aid],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO sessions (date, piece_id, minutes, confidence, note) VALUES ('2026-10-13', ?, 30, 4, '')",
+                rusqlite::params![p1],
+            )
+            .unwrap();
+            (aid, p1, p2)
+        };
+        let _ = p2;
+        // The pool merges only in a view scoped to exactly one
+        // audition: wider views keep one tile per piece.
+        let selected: std::collections::HashSet<i64> = [aid].into_iter().collect();
+        let tiles = app
+            .prep_tiles_for("2026-10-14", PREP_BIAS_DESKTOP, Some(&selected), "en")
+            .unwrap();
+        let merged = tiles
+            .iter()
+            .find(|t| t.optional && t.rated)
+            .expect("merged rated pool tile");
+        assert!(merged.label.contains(" / "));
+        assert!(merged.piece_id == p1 || merged.piece_id == p2);
+        assert_eq!(merged.title.matches('·').count(), 3);
+    }
 }

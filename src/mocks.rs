@@ -190,7 +190,7 @@ mod tests {
     use crate::db::open_memory;
     use std::sync::Mutex;
 
-    fn test_app() -> App {
+    fn test_app() -> (App, i64, i64, i64) {
         let app = App {
             db: Mutex::new(open_memory().unwrap()),
             data_dir: std::path::PathBuf::from("/tmp"),
@@ -202,46 +202,49 @@ mod tests {
             [],
         )
         .unwrap();
+        let aid = db.last_insert_rowid();
         db.execute(
             "INSERT INTO pieces(composer, work) VALUES('Haydn', 'Concerto')",
             [],
         )
         .unwrap();
+        let p1 = db.last_insert_rowid();
         db.execute(
             "INSERT INTO pieces(composer, work) VALUES('Dvorak', 'Concerto')",
             [],
         )
         .unwrap();
+        let p2 = db.last_insert_rowid();
         db.execute(
-            "INSERT INTO piece_audition(piece_id, audition_id) VALUES(1, 1)",
-            [],
+            "INSERT INTO piece_audition(piece_id, audition_id) VALUES(?, ?)",
+            [p1, aid],
         )
         .unwrap();
         db.execute(
-            "INSERT INTO piece_audition(piece_id, audition_id) VALUES(2, 1)",
-            [],
+            "INSERT INTO piece_audition(piece_id, audition_id) VALUES(?, ?)",
+            [p2, aid],
         )
         .unwrap();
         drop(db);
-        app
+        (app, aid, p1, p2)
     }
 
     #[test]
     fn pool_and_mock_round_trip() {
-        let app = test_app();
-        let pool = app.mock_pool(1, None).unwrap();
+        let (app, aid, p1, p2) = test_app();
+        let pool = app.mock_pool(aid, None).unwrap();
         assert_eq!(pool.len(), 2);
         {
             let db = app.db.lock().unwrap();
             db.execute(
-                "INSERT INTO mocks(audition_id, date, record_take) VALUES(1, '2026-10-14', 1)",
-                [],
+                "INSERT INTO mocks(audition_id, date, record_take) VALUES(?, '2026-10-14', 1)",
+                [aid],
             )
             .unwrap();
-            db.execute("INSERT INTO mock_items(mock_id, piece_id, position, confidence) VALUES(1, 1, 1, 4)", []).unwrap();
+            db.execute("INSERT INTO mock_items(mock_id, piece_id, position, confidence) VALUES(1, ?, 1, 4)", [p1]).unwrap();
             db.execute(
-                "INSERT INTO mock_items(mock_id, piece_id, position) VALUES(1, 2, 2)",
-                [],
+                "INSERT INTO mock_items(mock_id, piece_id, position) VALUES(1, ?, 2)",
+                [p2],
             )
             .unwrap();
         }
@@ -251,7 +254,7 @@ mod tests {
         assert_eq!(mock.items[0].title, "Haydn — Concerto");
         assert_eq!(mock.rated, 1);
         assert!((mock.mean - 4.0).abs() < f64::EPSILON);
-        let mocks = app.audition_mocks(1).unwrap();
+        let mocks = app.audition_mocks(aid).unwrap();
         assert_eq!(mocks.len(), 1);
     }
 }

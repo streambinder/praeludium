@@ -992,8 +992,18 @@ mod tests {
             current_user_id: SEEDED_USER_ID,
         };
         let auditions = app.list_auditions(false).unwrap();
-        assert_eq!(auditions.len(), 1);
-        assert!(!auditions[0].enrolled);
+        let venezia = auditions
+            .iter()
+            .find(|a| a.name == "Venezia")
+            .expect("the inserted audition lists");
+        assert!(!venezia.enrolled);
+        // 5.6: a seeded audition starts unenrolled too, and the
+        // reopen adds no enrollment for it either.
+        let cecilia = auditions
+            .iter()
+            .find(|a| a.name == "Santa Cecilia")
+            .expect("the seeded audition lists");
+        assert!(!cecilia.enrolled);
         let db = app.conn();
         let n: i64 = db
             .query_row("SELECT COUNT(*) FROM enrollments", [], |row| row.get(0))
@@ -1007,26 +1017,29 @@ mod tests {
     #[test]
     fn segments_round_trip_links_and_delete_guard() {
         let app = test_app();
-        {
+        let (aid, pid) = {
             let db = app.conn();
             db.execute(
                 "INSERT INTO auditions(name, audition_date, weight) VALUES('Roma', '2026-12-06', 4)",
                 [],
             )
             .unwrap();
+            let aid = db.last_insert_rowid();
             db.execute(
                 "INSERT INTO pieces(composer, work, kind) VALUES('Haydn', 'Concerto in Re', 'solo')",
                 [],
             )
             .unwrap();
+            let pid = db.last_insert_rowid();
             db.execute(
-                "INSERT INTO piece_audition(piece_id, audition_id) VALUES(1, 1)",
-                [],
+                "INSERT INTO piece_audition(piece_id, audition_id) VALUES(?, ?)",
+                params![pid, aid],
             )
             .unwrap();
-        }
+            (aid, pid)
+        };
         let cadenza = Segment {
-            piece_id: 1,
+            piece_id: pid,
             alias: "Cadenza".into(),
             start_kind: "bar".into(),
             start_value: "100".into(),
@@ -1037,7 +1050,7 @@ mod tests {
         let cadenza_id = app.add_segment(&cadenza).unwrap();
         let other_id = app
             .add_segment(&Segment {
-                piece_id: 1,
+                piece_id: pid,
                 start_kind: "start".into(),
                 end_kind: "bar".into(),
                 end_value: "99".into(),
@@ -1049,76 +1062,84 @@ mod tests {
         // An unnamed segment may repeat.
         assert!(
             app.add_segment(&Segment {
-                piece_id: 1,
+                piece_id: pid,
                 ..Default::default()
             })
             .is_ok()
         );
-        let segs = app.segments_for_piece(1).unwrap();
+        let segs = app.segments_for_piece(pid).unwrap();
         assert_eq!(segs.len(), 3);
         assert_eq!(segs[0].alias, "Cadenza");
 
         // Link set: a foreign segment id is ignored, members stick.
-        app.set_link_segments(1, 1, &[cadenza_id, 999]).unwrap();
-        assert_eq!(app.link_segment_ids(1, 1).unwrap(), vec![cadenza_id]);
+        app.set_link_segments(pid, aid, &[cadenza_id, 999]).unwrap();
+        assert_eq!(app.link_segment_ids(pid, aid).unwrap(), vec![cadenza_id]);
         // Deletion is refused while a link references the segment.
         assert!(!app.delete_segment(cadenza_id).unwrap());
-        app.set_link_segments(1, 1, &[]).unwrap();
-        assert!(app.link_segment_ids(1, 1).unwrap().is_empty());
+        app.set_link_segments(pid, aid, &[]).unwrap();
+        assert!(app.link_segment_ids(pid, aid).unwrap().is_empty());
         assert!(app.delete_segment(cadenza_id).unwrap());
         assert!(app.delete_segment(other_id).unwrap());
-        assert_eq!(app.segments_for_piece(1).unwrap().len(), 1);
+        assert_eq!(app.segments_for_piece(pid).unwrap().len(), 1);
     }
 
     #[test]
     fn pieces_round_trip_with_auditions() {
         let app = test_app();
-        {
+        let (_aid, pid) = {
             let db = app.conn();
             db.execute(
                 "INSERT INTO auditions(name, audition_date, weight) VALUES('Roma', '2026-12-06', 4)",
                 [],
             )
             .unwrap();
+            let aid = db.last_insert_rowid();
             db.execute(
                 "INSERT INTO pieces(composer, work, kind) VALUES('Haydn', 'Concerto in Do', 'solo')",
                 [],
             )
             .unwrap();
+            let pid = db.last_insert_rowid();
             db.execute(
-                "INSERT INTO piece_audition(piece_id, audition_id) VALUES(1, 1)",
-                [],
+                "INSERT INTO piece_audition(piece_id, audition_id) VALUES(?, ?)",
+                params![pid, aid],
             )
             .unwrap();
-        }
-        let pieces = app.list_pieces(0, "", false, "").unwrap();
-        assert_eq!(pieces.len(), 1);
-        assert_eq!(pieces[0].composer, "Haydn");
-        assert_eq!(pieces[0].auditions.len(), 1);
-        assert_eq!(app.list_pieces(0, "", false, "hayd").unwrap().len(), 1);
+            (aid, pid)
+        };
+        let pieces = app.list_pieces(0, "", false, "hayd").unwrap();
+        let mine: Vec<_> = pieces
+            .iter()
+            .filter(|p| p.work == "Concerto in Do")
+            .collect();
+        assert_eq!(mine.len(), 1);
+        assert_eq!(mine[0].composer, "Haydn");
+        assert_eq!(mine[0].auditions.len(), 1);
         assert_eq!(app.list_pieces(0, "", false, "zzz").unwrap().len(), 0);
-        let piece = app.get_piece(1).unwrap();
+        let piece = app.get_piece(pid).unwrap();
         assert_eq!(piece.auditions[0].name, "Roma");
     }
 
     #[test]
     fn confidence_and_practice_dates() {
         let app = test_app();
-        {
+        let pid = {
             let db = app.conn();
             db.execute("INSERT INTO pieces(composer, work) VALUES('A', 'B')", [])
                 .unwrap();
+            let pid = db.last_insert_rowid();
             db.execute(
-                "INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES('2026-10-10', 1, 30, 4)",
-                [],
+                "INSERT INTO sessions(date, piece_id, minutes, confidence) VALUES('2026-10-10', ?, 30, 4)",
+                params![pid],
             )
             .unwrap();
-        }
-        let (conf, rated) = app.latest_confidence(1).unwrap();
+            pid
+        };
+        let (conf, rated) = app.latest_confidence(pid).unwrap();
         assert!(rated && (conf - 4.0).abs() < f64::EPSILON);
-        assert_eq!(app.last_practice_date(1).unwrap(), "2026-10-10");
-        assert_eq!(app.days_since_practice(1, "2026-10-15").unwrap(), Some(5));
-        let mark = app.today_mark(1, "2026-10-10").unwrap();
+        assert_eq!(app.last_practice_date(pid).unwrap(), "2026-10-10");
+        assert_eq!(app.days_since_practice(pid, "2026-10-15").unwrap(), Some(5));
+        let mark = app.today_mark(pid, "2026-10-10").unwrap();
         assert_eq!(mark.logged, 30);
         assert!(mark.practiced);
     }
