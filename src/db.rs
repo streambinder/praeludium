@@ -231,19 +231,28 @@ pub struct AuditionLink {
 }
 
 pub fn open_db(path: &std::path::Path) -> Result<Connection> {
-    let db = Connection::open(path)?;
+    let mut db = Connection::open(path)?;
     db.pragma_update(None, "journal_mode", "WAL")?;
     db.pragma_update(None, "foreign_keys", "ON")?;
-    migrate(&db)?;
+    init_db(&mut db)?;
     Ok(db)
 }
 
 /// In-memory database for tests.
 pub fn open_memory() -> Result<Connection> {
-    let db = Connection::open_in_memory()?;
+    let mut db = Connection::open_in_memory()?;
     db.pragma_update(None, "foreign_keys", "ON")?;
-    migrate(&db)?;
+    init_db(&mut db)?;
     Ok(db)
+}
+
+/// Create the schema and apply the repository seed, through one
+/// shared path: every database the application opens holds the
+/// full seed data.
+fn init_db(db: &mut Connection) -> Result<()> {
+    migrate(db)?;
+    crate::seed::apply_seed(db, &crate::seed_data::SEED)?;
+    Ok(())
 }
 
 /// Test-only helper: insert the users row a direct enrollments
