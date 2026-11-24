@@ -246,24 +246,11 @@ pub fn open_memory() -> Result<Connection> {
     Ok(db)
 }
 
-/// Add one column to a table. A duplicate-column error means the
-/// migration already ran and is not a failure.
-fn add_column(db: &Connection, stmt: &str, label: &str) -> Result<()> {
-    match db.execute_batch(stmt) {
-        Ok(()) => Ok(()),
-        Err(err) => {
-            if err.to_string().contains("duplicate column name") {
-                Ok(())
-            } else {
-                eprintln!("migrate {label}: {err}");
-                Err(err)
-            }
-        }
-    }
-}
-
+/// Create the schema if it is missing, and nothing else: no data
+/// writes, no renames, no column changes. A fresh database is
+/// complete from the CREATE statements alone; an existing one is
+/// left untouched.
 fn migrate(db: &Connection) -> Result<()> {
-    rename_legacy_schema(db)?;
     let stmts = [
         "CREATE TABLE IF NOT EXISTS auditions(
 			id INTEGER PRIMARY KEY,
@@ -282,11 +269,17 @@ fn migrate(db: &Connection) -> Result<()> {
 			excerpt TEXT NOT NULL DEFAULT '',
 			kind TEXT NOT NULL DEFAULT 'excerpt',
 			archived_at TEXT,
-			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+			difficulty INTEGER NOT NULL DEFAULT 3,
+			target_bpm INTEGER
 		)",
         "CREATE TABLE IF NOT EXISTS piece_audition(
 			piece_id INTEGER NOT NULL REFERENCES pieces(id) ON DELETE CASCADE,
 			audition_id INTEGER NOT NULL REFERENCES auditions(id) ON DELETE CASCADE,
+			excerpt TEXT NOT NULL DEFAULT '',
+			note TEXT NOT NULL DEFAULT '',
+			round_id INTEGER REFERENCES audition_rounds(id) ON DELETE SET NULL,
+			optional INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY(piece_id, audition_id)
 		)",
         "CREATE TABLE IF NOT EXISTS audition_links(
@@ -302,7 +295,9 @@ fn migrate(db: &Connection) -> Result<()> {
 			minutes INTEGER NOT NULL DEFAULT 0,
 			confidence INTEGER NOT NULL DEFAULT 0,
 			note TEXT NOT NULL DEFAULT '',
-			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+			bpm INTEGER,
+			segment_id INTEGER REFERENCES segments(id) ON DELETE SET NULL
 		)",
         "CREATE INDEX IF NOT EXISTS idx_sessions_piece_date ON sessions(piece_id, date)",
         "CREATE TABLE IF NOT EXISTS availability(
@@ -384,109 +379,20 @@ fn migrate(db: &Connection) -> Result<()> {
     for s in stmts {
         db.execute_batch(s)?;
     }
-    // Enrollment is opt-in per user. The migration seeds the one
-    // user and enrolls them in every existing audition, so the
-    // deploy alone changes nothing in the plan.
+    // The users row is the one seed migrate still writes: with
+    // foreign keys on, enrollments references users(id), so the
+    // enroll toggle fails on a fresh database without it. Moving
+    // user creation out of migrate is a follow-up, not this fix.
     db.execute(
         "INSERT OR IGNORE INTO users(id, name) VALUES(?, 'Agnese')",
         params![SEEDED_USER_ID],
     )?;
-    db.execute(
-        "INSERT OR IGNORE INTO enrollments(user_id, audition_id) SELECT ?, id FROM auditions",
-        params![SEEDED_USER_ID],
-    )?;
-    // auditions.archived_at was added after the first schema revision.
-    add_column(
-        db,
-        "ALTER TABLE auditions ADD COLUMN archived_at TEXT",
-        "archived_at",
-    )?;
-    // pieces.difficulty was added after the first schema revision.
-    add_column(
-        db,
-        "ALTER TABLE pieces ADD COLUMN difficulty INTEGER NOT NULL DEFAULT 3",
-        "difficulty",
-    )?;
-    // piece_audition.excerpt holds the excerpt each audition asks
-    // for; the column started out as notes and is renamed when present.
-    ensure_link_excerpt(db)?;
-    // piece_audition.note holds the free information of a link;
-    // the requirement of a link lives in its segment scope alone.
-    add_column(
-        db,
-        "ALTER TABLE piece_audition ADD COLUMN note TEXT NOT NULL DEFAULT ''",
-        "note",
-    )?;
-    // piece_audition.round_id names the round a linked piece belongs
-    // to; NULL means the piece is asked in every round.
-    add_column(
-        db,
-        "ALTER TABLE piece_audition ADD COLUMN round_id INTEGER REFERENCES audition_rounds(id) ON DELETE SET NULL",
-        "round_id",
-    )?;
-    // piece_audition.optional marks the link as one alternative
-    // of a candidate choice; 0 keeps the link required.
-    add_column(
-        db,
-        "ALTER TABLE piece_audition ADD COLUMN optional INTEGER NOT NULL DEFAULT 0",
-        "optional",
-    )?;
-    // pieces.target_bpm is the optional target tempo of a piece; NULL
-    // means the piece carries no tempo signal.
-    add_column(
-        db,
-        "ALTER TABLE pieces ADD COLUMN target_bpm INTEGER",
-        "target_bpm",
-    )?;
-    // sessions.bpm holds the optional metronome mark of a practice
-    // session; NULL when the player did not record one.
-    add_column(db, "ALTER TABLE sessions ADD COLUMN bpm INTEGER", "bpm")?;
-    // sessions.segment_id names the segment a session covered;
-    // NULL means the session covered the whole piece.
-    add_column(
-        db,
-        "ALTER TABLE sessions ADD COLUMN segment_id INTEGER REFERENCES segments(id) ON DELETE SET NULL",
-        "segment_id",
-    )?;
-    // Stored values started out in Italian; rewrite them in English.
-    for q in [
-        "UPDATE sessions SET note='skipped' WHERE note='saltato'",
-        "UPDATE sessions SET note='auto-skipped' WHERE note='auto-saltato'",
-        "UPDATE sessions SET note='postponed' WHERE note='rimandato'",
-        "UPDATE pieces SET kind='excerpt' WHERE kind='passo'",
-    ] {
-        db.execute_batch(q)?;
-    }
     Ok(())
 }
 
-/// Rename the original Italian tables and columns to English. Every
-/// step is guarded, so the function is a no-op on databases that
-/// already use the English schema. Stored values are rewritten at
-/// the end of migrate, once the tables exist for sure.
-fn rename_legacy_schema(db: &Connection) -> Result<()> {
-    for (from, to) in [
-        ("concorsi", "auditions"),
-        ("piece_concorso", "piece_audition"),
-        ("concorso_links", "audition_links"),
-    ] {
-        if table_exists(db, from)? {
-            db.execute_batch(&format!("ALTER TABLE {from} RENAME TO {to}"))?;
-        }
-    }
-    for (table, from, to) in [
-        ("piece_audition", "concorso_id", "audition_id"),
-        ("piece_audition", "estratto", "excerpt"),
-        ("audition_links", "concorso_id", "audition_id"),
-        ("sessions", "tempo", "bpm"),
-    ] {
-        if table_columns(db, table)?.contains(from) {
-            db.execute_batch(&format!("ALTER TABLE {table} RENAME COLUMN {from} TO {to}"))?;
-        }
-    }
-    Ok(())
-}
-
+/// Test-only schema inspection: after the migration cleanup
+/// nothing in production code reads the schema back.
+#[cfg(test)]
 fn table_exists(db: &Connection, name: &str) -> Result<bool> {
     let n: i64 = db.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
@@ -496,21 +402,7 @@ fn table_exists(db: &Connection, name: &str) -> Result<bool> {
     Ok(n > 0)
 }
 
-/// Rename the original notes column to excerpt, or add excerpt on
-/// installs that never had notes.
-fn ensure_link_excerpt(db: &Connection) -> Result<()> {
-    let cols = table_columns(db, "piece_audition")?;
-    if cols.contains("excerpt") {
-        return Ok(());
-    }
-    if cols.contains("notes") {
-        db.execute_batch("ALTER TABLE piece_audition RENAME COLUMN notes TO excerpt")?;
-    } else {
-        db.execute_batch("ALTER TABLE piece_audition ADD COLUMN excerpt TEXT NOT NULL DEFAULT ''")?;
-    }
-    Ok(())
-}
-
+#[cfg(test)]
 fn table_columns(db: &Connection, table: &str) -> Result<std::collections::HashSet<String>> {
     let mut stmt = db.prepare(&format!("PRAGMA table_info({table})"))?;
     let names = stmt
@@ -1097,18 +989,65 @@ mod tests {
             "audition_links",
             "segments",
             "link_segments",
+            "users",
+            "enrollments",
         ] {
             assert!(table_exists(&db, table).unwrap(), "missing {table}");
         }
         let cols = table_columns(&db, "pieces").unwrap();
         assert!(cols.contains("difficulty"));
         assert!(cols.contains("target_bpm"));
+        let cols = table_columns(&db, "piece_audition").unwrap();
+        assert!(cols.contains("excerpt"));
+        assert!(cols.contains("note"));
+        assert!(cols.contains("round_id"));
+        assert!(cols.contains("optional"));
         let cols = table_columns(&db, "sessions").unwrap();
+        assert!(cols.contains("bpm"));
         assert!(cols.contains("segment_id"));
         drop(db);
         // A second migration pass changes nothing.
         let db = app.conn();
         migrate(&db).unwrap();
+    }
+
+    #[test]
+    fn reopening_never_enrolls() {
+        let path = std::env::temp_dir().join(format!(
+            "praeludium-no-auto-enroll-{}.db",
+            std::process::id()
+        ));
+        let cleanup = |path: &std::path::Path| {
+            let _ = std::fs::remove_file(path);
+            let _ = std::fs::remove_file(format!("{}-wal", path.display()));
+            let _ = std::fs::remove_file(format!("{}-shm", path.display()));
+        };
+        cleanup(&path);
+        {
+            let db = open_db(&path).unwrap();
+            db.execute(
+                "INSERT INTO auditions(name, audition_date, weight) VALUES('Venezia', '2027-02-15', 3)",
+                [],
+            )
+            .unwrap();
+        }
+        // Reopening runs migrate again: no enrollment may appear.
+        let app = App {
+            db: Mutex::new(open_db(&path).unwrap()),
+            data_dir: PathBuf::from("/tmp"),
+            current_user_id: SEEDED_USER_ID,
+        };
+        let auditions = app.list_auditions(false).unwrap();
+        assert_eq!(auditions.len(), 1);
+        assert!(!auditions[0].enrolled);
+        let db = app.conn();
+        let n: i64 = db
+            .query_row("SELECT COUNT(*) FROM enrollments", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(n, 0);
+        drop(db);
+        drop(app);
+        cleanup(&path);
     }
 
     #[test]
