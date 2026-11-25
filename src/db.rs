@@ -80,6 +80,11 @@ pub struct Audition {
     /// alternative of a candidate choice.
     #[serde(rename = "Optional")]
     pub optional: bool,
+    /// Per-link choice cluster, set only when read through
+    /// piece_audition: the named candidate choice this link
+    /// belongs to; null when the link has no cluster.
+    #[serde(rename = "Cluster")]
+    pub cluster: Option<String>,
     /// Mean preparation level 0..4 of its pieces, stamped on demand.
     #[serde(rename = "Level")]
     pub level: i64,
@@ -300,6 +305,7 @@ fn migrate(db: &Connection) -> Result<()> {
 			note TEXT NOT NULL DEFAULT '',
 			round_id INTEGER REFERENCES audition_rounds(id) ON DELETE SET NULL,
 			optional INTEGER NOT NULL DEFAULT 0,
+			cluster TEXT,
 			PRIMARY KEY(piece_id, audition_id)
 		)",
         "CREATE TABLE IF NOT EXISTS audition_links(
@@ -473,7 +479,7 @@ impl App {
         let mut stmt = db.prepare(
             "SELECT c.id, c.name, c.audition_date, c.weight, c.audition_date < ?3, pc.note,
 			pc.round_id, COALESCE(rd.name, ''), pc.optional,
-			EXISTS(SELECT 1 FROM enrollments e WHERE e.user_id=?2 AND e.audition_id=c.id)
+			EXISTS(SELECT 1 FROM enrollments e WHERE e.user_id=?2 AND e.audition_id=c.id), pc.cluster
 			FROM auditions c JOIN piece_audition pc ON pc.audition_id=c.id
 			LEFT JOIN audition_rounds rd ON rd.id = pc.round_id
 			WHERE pc.piece_id=?1 ORDER BY c.audition_date",
@@ -491,6 +497,7 @@ impl App {
                     round_name: row.get(7)?,
                     optional: row.get::<_, i64>(8)? != 0,
                     enrolled: row.get::<_, i64>(9)? != 0,
+                    cluster: row.get(10)?,
                     ..Default::default()
                 })
             })?
@@ -936,6 +943,7 @@ mod tests {
         assert!(cols.contains("note"));
         assert!(cols.contains("round_id"));
         assert!(cols.contains("optional"));
+        assert!(cols.contains("cluster"));
         let cols = table_columns(&db, "sessions").unwrap();
         assert!(cols.contains("bpm"));
         assert!(cols.contains("segment_id"));
@@ -948,6 +956,35 @@ mod tests {
         // A second migration pass changes nothing.
         let db = app.conn();
         migrate(&db).unwrap();
+    }
+
+    #[test]
+    fn piece_auditions_reads_a_null_cluster() {
+        let app = test_app();
+        let pid = {
+            let db = app.conn();
+            db.execute(
+                "INSERT INTO auditions(name, audition_date, weight) VALUES('Roma', '2026-12-06', 4)",
+                [],
+            )
+            .unwrap();
+            let aid = db.last_insert_rowid();
+            db.execute(
+                "INSERT INTO pieces(composer, work, kind) VALUES('Haydn', 'Concerto in Re', 'solo')",
+                [],
+            )
+            .unwrap();
+            let pid = db.last_insert_rowid();
+            db.execute(
+                "INSERT INTO piece_audition(piece_id, audition_id) VALUES(?, ?)",
+                params![pid, aid],
+            )
+            .unwrap();
+            pid
+        };
+        let links = app.piece_auditions(pid, "2026-11-25").unwrap();
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].cluster, None);
     }
 
     #[test]
