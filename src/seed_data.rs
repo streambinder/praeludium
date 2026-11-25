@@ -729,6 +729,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 2,
@@ -737,6 +738,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 6,
@@ -745,6 +747,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 8,
@@ -753,6 +756,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 9,
@@ -761,6 +765,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 14,
@@ -769,6 +774,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 15,
@@ -777,6 +783,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 16,
@@ -785,6 +792,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 22,
@@ -793,6 +801,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 23,
@@ -801,6 +810,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 25,
@@ -809,6 +819,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "senza cadenza, con pf",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 34,
@@ -817,6 +828,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: true,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 41,
@@ -825,6 +837,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 42,
@@ -833,6 +846,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 43,
@@ -841,6 +855,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 44,
@@ -849,6 +864,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 45,
@@ -857,6 +873,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 1,
@@ -865,6 +882,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 2,
@@ -873,6 +891,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 3,
@@ -881,6 +900,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 6,
@@ -889,6 +909,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 8,
@@ -897,6 +918,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 10,
@@ -905,6 +927,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 11,
@@ -913,6 +936,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 12,
@@ -921,6 +945,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "parte violoncello I e II, inizio–prima b. dell’Allegro",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 13,
@@ -929,6 +954,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "estratto",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 16,
@@ -937,6 +963,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 17,
@@ -945,6 +972,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 20,
@@ -953,6 +981,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "quartetto (parte violoncello I e II), inizio–prima b. di 11",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 25,
@@ -961,6 +990,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "CON cadenza (ed. Schott/Gendron)",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 31,
@@ -969,6 +999,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 33,
@@ -977,6 +1008,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 38,
@@ -985,6 +1017,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 39,
@@ -993,6 +1026,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 40,
@@ -1001,6 +1035,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 1,
@@ -1009,6 +1044,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 2,
@@ -1017,6 +1053,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 3,
@@ -1025,6 +1062,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 6,
@@ -1033,6 +1071,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 10,
@@ -1041,6 +1080,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 13,
@@ -1049,6 +1089,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 16,
@@ -1057,6 +1098,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "solo n.3 per vc e basso, dall'inizio",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 17,
@@ -1065,6 +1107,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 19,
@@ -1073,6 +1116,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "parte di violoncello",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 24,
@@ -1081,6 +1125,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 25,
@@ -1089,6 +1134,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "senza cadenza (ed. Gevaert esclusa)",
         round_id: None,
         optional: true,
+        cluster: Some("haydn"),
     },
     SeedPieceAudition {
         piece_id: 27,
@@ -1097,6 +1143,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: true,
+        cluster: Some("haydn"),
     },
     SeedPieceAudition {
         piece_id: 28,
@@ -1105,6 +1152,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "finale a scelta",
         round_id: None,
         optional: true,
+        cluster: Some("concerto"),
     },
     SeedPieceAudition {
         piece_id: 29,
@@ -1113,6 +1161,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: true,
+        cluster: Some("concerto"),
     },
     SeedPieceAudition {
         piece_id: 30,
@@ -1121,6 +1170,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: true,
+        cluster: Some("concerto"),
     },
     SeedPieceAudition {
         piece_id: 1,
@@ -1129,6 +1179,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 3,
@@ -1137,6 +1188,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 4,
@@ -1145,6 +1197,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 6,
@@ -1153,6 +1206,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 7,
@@ -1161,6 +1215,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 8,
@@ -1169,6 +1224,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 12,
@@ -1177,6 +1233,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "solo parte 2° violoncello",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 16,
@@ -1185,6 +1242,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 17,
@@ -1193,6 +1251,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 18,
@@ -1201,6 +1260,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 20,
@@ -1209,6 +1269,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "solo parte 2° violoncello",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 25,
@@ -1217,6 +1278,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(8),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 26,
@@ -1225,6 +1287,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(8),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 28,
@@ -1233,6 +1296,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(8),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 36,
@@ -1241,6 +1305,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 37,
@@ -1249,6 +1314,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 46,
@@ -1257,6 +1323,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(9),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 1,
@@ -1265,6 +1332,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 3,
@@ -1273,6 +1341,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 4,
@@ -1281,6 +1350,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 6,
@@ -1289,6 +1359,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 7,
@@ -1297,6 +1368,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 8,
@@ -1305,6 +1377,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 12,
@@ -1313,6 +1386,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "solo parte 2° violoncello",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 16,
@@ -1321,6 +1395,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 17,
@@ -1329,6 +1404,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 18,
@@ -1337,6 +1413,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "solo parte del secondo",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 25,
@@ -1345,6 +1422,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(10),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 28,
@@ -1353,6 +1431,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(10),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 36,
@@ -1361,6 +1440,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 37,
@@ -1369,6 +1449,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 46,
@@ -1377,6 +1458,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: Some(11),
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 25,
@@ -1385,6 +1467,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 26,
@@ -1393,6 +1476,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 28,
@@ -1401,6 +1485,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: true,
+        cluster: Some("concerto"),
     },
     SeedPieceAudition {
         piece_id: 29,
@@ -1409,6 +1494,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: true,
+        cluster: Some("concerto"),
     },
     SeedPieceAudition {
         piece_id: 1,
@@ -1417,6 +1503,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 4,
@@ -1425,6 +1512,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 6,
@@ -1433,6 +1521,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 10,
@@ -1441,6 +1530,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 47,
@@ -1449,6 +1539,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 48,
@@ -1457,6 +1548,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 24,
@@ -1465,6 +1557,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 22,
@@ -1473,6 +1566,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 17,
@@ -1481,6 +1575,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 16,
@@ -1489,6 +1584,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
     SeedPieceAudition {
         piece_id: 49,
@@ -1497,6 +1593,7 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: false,
+        cluster: None,
     },
 ];
 

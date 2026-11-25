@@ -64,6 +64,7 @@ pub struct SeedPieceAudition {
     pub note: &'static str,
     pub round_id: Option<i64>,
     pub optional: bool,
+    pub cluster: Option<&'static str>,
 }
 
 /// One seeded segment row.
@@ -93,6 +94,9 @@ type PieceRow = (String, String, String, String, String, i64, Option<i64>);
 
 /// Current seed columns of one segment row, for the overwrite check.
 type SegmentRow = (i64, String, String, String, i64, String, String, i64);
+
+/// Current seed columns of one link row, for the overwrite check.
+type LinkRow = (String, String, Option<i64>, i64, Option<String>);
 
 /// The seed data: one slice per canonical table.
 #[derive(Debug, Default, PartialEq)]
@@ -455,19 +459,20 @@ fn seed_piece_auditions(
     report: &mut TableReport,
 ) -> Result<()> {
     let mut existing = tx.prepare(
-        "SELECT excerpt, note, round_id, optional FROM piece_audition
+        "SELECT excerpt, note, round_id, optional, cluster FROM piece_audition
         WHERE piece_id=? AND audition_id=?",
     )?;
     let mut upsert = tx.prepare(
-        "INSERT INTO piece_audition(piece_id, audition_id, excerpt, note, round_id, optional)
-        VALUES(?,?,?,?,?,?)
+        "INSERT INTO piece_audition(piece_id, audition_id, excerpt, note, round_id, optional, cluster)
+        VALUES(?,?,?,?,?,?,?)
         ON CONFLICT(piece_id, audition_id) DO UPDATE SET excerpt=excluded.excerpt,
-        note=excluded.note, round_id=excluded.round_id, optional=excluded.optional",
+        note=excluded.note, round_id=excluded.round_id, optional=excluded.optional,
+        cluster=excluded.cluster",
     )?;
     for row in rows {
-        let found: Option<(String, String, Option<i64>, i64)> = existing
+        let found: Option<LinkRow> = existing
             .query_row(params![row.piece_id, row.audition_id], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
             })
             .optional()?;
         let wanted = (
@@ -475,6 +480,7 @@ fn seed_piece_auditions(
             row.note.to_string(),
             row.round_id,
             i64::from(row.optional),
+            row.cluster.map(str::to_string),
         );
         let key = format!("{}:{}", row.piece_id, row.audition_id);
         match found {
@@ -485,7 +491,8 @@ fn seed_piece_auditions(
                     row.excerpt,
                     row.note,
                     row.round_id,
-                    i64::from(row.optional)
+                    i64::from(row.optional),
+                    row.cluster
                 ])?;
                 report.inserted += 1;
             }
@@ -496,7 +503,8 @@ fn seed_piece_auditions(
                     row.excerpt,
                     row.note,
                     row.round_id,
-                    i64::from(row.optional)
+                    i64::from(row.optional),
+                    row.cluster
                 ])?;
                 report.updated += 1;
                 report.overwritten.push(key);
@@ -785,7 +793,7 @@ fn compare_piece_auditions(
     diff: &mut TableDiff,
 ) -> Result<()> {
     let mut stmt = db.prepare(
-        "SELECT piece_id, audition_id, excerpt, note, round_id, optional FROM piece_audition",
+        "SELECT piece_id, audition_id, excerpt, note, round_id, optional, cluster FROM piece_audition",
     )?;
     let stored = stmt
         .query_map([], |r| {
@@ -796,11 +804,11 @@ fn compare_piece_auditions(
                     r.get::<_, String>(3)?,
                     r.get::<_, Option<i64>>(4)?,
                     r.get::<_, i64>(5)?,
+                    r.get::<_, Option<String>>(6)?,
                 ),
             ))
         })?
-        .collect::<Result<std::collections::HashMap<String, (String, String, Option<i64>, i64)>>>(
-        )?;
+        .collect::<Result<std::collections::HashMap<String, LinkRow>>>()?;
     for row in rows {
         let key = format!("{}:{}", row.piece_id, row.audition_id);
         let wanted = (
@@ -808,6 +816,7 @@ fn compare_piece_auditions(
             row.note.to_string(),
             row.round_id,
             i64::from(row.optional),
+            row.cluster.map(str::to_string),
         );
         match stored.get(&key) {
             None => diff.missing.push(key),
@@ -985,6 +994,26 @@ mod tests {
         assert_eq!(count(&db, "link_segments"), 35);
         assert_eq!(count(&db, "users"), 0);
         assert_eq!(count(&db, "enrollments"), 0);
+        // Three choice clusters hold seven links: Haydn and
+        // concerto for San Carlo, concerto for La Fenice. The
+        // eighth optional link, Piatti for Santa Cecilia, has
+        // no cluster.
+        let clustered: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM piece_audition WHERE cluster IS NOT NULL",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(clustered, 7);
+        let groups: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM (SELECT DISTINCT audition_id, cluster FROM piece_audition WHERE cluster IS NOT NULL)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(groups, 3);
         let composer: String = db
             .query_row("SELECT composer FROM pieces WHERE id=1", [], |r| r.get(0))
             .unwrap();
