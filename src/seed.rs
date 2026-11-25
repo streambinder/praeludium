@@ -13,8 +13,7 @@ use crate::db::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 /// One seeded audition row: every column the seed writes.
-/// `city` and the exact `archived_at` timestamp are seed data;
-/// the `Audition` struct exposes neither.
+/// `city` is seed data; the `Audition` struct does not expose it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SeedAudition {
     pub id: i64,
@@ -22,12 +21,10 @@ pub struct SeedAudition {
     pub city: &'static str,
     pub date: &'static str,
     pub weight: i64,
-    pub archived_at: Option<&'static str>,
 }
 
 /// One seeded piece row: every column the seed writes. The
-/// `Piece` struct exposes neither `excerpt` nor the exact
-/// `archived_at` timestamp.
+/// `Piece` struct does not expose `excerpt`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SeedPiece {
     pub id: i64,
@@ -38,7 +35,6 @@ pub struct SeedPiece {
     pub kind: &'static str,
     pub difficulty: i64,
     pub target_bpm: Option<i64>,
-    pub archived_at: Option<&'static str>,
 }
 
 /// One seeded audition round row.
@@ -93,16 +89,7 @@ pub struct SeedLinkSegment {
 }
 
 /// Current seed columns of one piece row, for the overwrite check.
-type PieceRow = (
-    String,
-    String,
-    String,
-    String,
-    String,
-    i64,
-    Option<i64>,
-    Option<String>,
-);
+type PieceRow = (String, String, String, String, String, i64, Option<i64>);
 
 /// Current seed columns of one segment row, for the overwrite check.
 type SegmentRow = (i64, String, String, String, i64, String, String, i64);
@@ -285,32 +272,23 @@ fn seed_auditions(
     rows: &[SeedAudition],
     report: &mut TableReport,
 ) -> Result<()> {
-    let mut existing = tx.prepare(
-        "SELECT name, city, audition_date, weight, archived_at FROM auditions WHERE id=?",
-    )?;
+    let mut existing =
+        tx.prepare("SELECT name, city, audition_date, weight FROM auditions WHERE id=?")?;
     let mut upsert = tx.prepare(
-        "INSERT INTO auditions(id, name, city, audition_date, weight, archived_at)
-        VALUES(?,?,?,?,?,?)
+        "INSERT INTO auditions(id, name, city, audition_date, weight)
+        VALUES(?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET name=excluded.name, city=excluded.city,
-        audition_date=excluded.audition_date, weight=excluded.weight,
-        archived_at=excluded.archived_at",
+        audition_date=excluded.audition_date, weight=excluded.weight",
     )?;
     for row in rows {
-        let found: Option<(String, String, String, i64, Option<String>)> = existing
+        let found: Option<(String, String, String, i64)> = existing
             .query_row(params![row.id], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
             })
             .optional()?;
         match found {
             None => {
-                upsert.execute(params![
-                    row.id,
-                    row.name,
-                    row.city,
-                    row.date,
-                    row.weight,
-                    row.archived_at
-                ])?;
+                upsert.execute(params![row.id, row.name, row.city, row.date, row.weight])?;
                 report.inserted += 1;
             }
             Some(current)
@@ -320,17 +298,9 @@ fn seed_auditions(
                         row.city.to_string(),
                         row.date.to_string(),
                         row.weight,
-                        row.archived_at.map(str::to_string),
                     ) =>
             {
-                upsert.execute(params![
-                    row.id,
-                    row.name,
-                    row.city,
-                    row.date,
-                    row.weight,
-                    row.archived_at
-                ])?;
+                upsert.execute(params![row.id, row.name, row.city, row.date, row.weight])?;
                 report.updated += 1;
                 report.overwritten.push(row.id.to_string());
             }
@@ -346,16 +316,15 @@ fn seed_pieces(
     report: &mut TableReport,
 ) -> Result<()> {
     let mut existing = tx.prepare(
-        "SELECT composer, work, movement, excerpt, kind, difficulty, target_bpm, archived_at
+        "SELECT composer, work, movement, excerpt, kind, difficulty, target_bpm
         FROM pieces WHERE id=?",
     )?;
     let mut upsert = tx.prepare(
-        "INSERT INTO pieces(id, composer, work, movement, excerpt, kind, difficulty, target_bpm, archived_at)
-        VALUES(?,?,?,?,?,?,?,?,?)
+        "INSERT INTO pieces(id, composer, work, movement, excerpt, kind, difficulty, target_bpm)
+        VALUES(?,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET composer=excluded.composer, work=excluded.work,
         movement=excluded.movement, excerpt=excluded.excerpt, kind=excluded.kind,
-        difficulty=excluded.difficulty, target_bpm=excluded.target_bpm,
-        archived_at=excluded.archived_at",
+        difficulty=excluded.difficulty, target_bpm=excluded.target_bpm",
     )?;
     for row in rows {
         let found: Option<PieceRow> = existing
@@ -368,7 +337,6 @@ fn seed_pieces(
                     r.get(4)?,
                     r.get(5)?,
                     r.get(6)?,
-                    r.get(7)?,
                 ))
             })
             .optional()?;
@@ -380,7 +348,6 @@ fn seed_pieces(
             row.kind.to_string(),
             row.difficulty,
             row.target_bpm,
-            row.archived_at.map(str::to_string),
         );
         match found {
             None => {
@@ -392,8 +359,7 @@ fn seed_pieces(
                     row.excerpt,
                     row.kind,
                     row.difficulty,
-                    row.target_bpm,
-                    row.archived_at
+                    row.target_bpm
                 ])?;
                 report.inserted += 1;
             }
@@ -406,8 +372,7 @@ fn seed_pieces(
                     row.excerpt,
                     row.kind,
                     row.difficulty,
-                    row.target_bpm,
-                    row.archived_at
+                    row.target_bpm
                 ])?;
                 report.updated += 1;
                 report.overwritten.push(row.id.to_string());
@@ -669,8 +634,7 @@ pub fn compare_seed(db: &Connection, data: &SeedData) -> Result<SeedDiff> {
 }
 
 fn compare_auditions(db: &Connection, rows: &[SeedAudition], diff: &mut TableDiff) -> Result<()> {
-    let mut stmt =
-        db.prepare("SELECT id, name, city, audition_date, weight, archived_at FROM auditions")?;
+    let mut stmt = db.prepare("SELECT id, name, city, audition_date, weight FROM auditions")?;
     let stored = stmt
         .query_map([], |r| {
             Ok((
@@ -680,18 +644,16 @@ fn compare_auditions(db: &Connection, rows: &[SeedAudition], diff: &mut TableDif
                     r.get::<_, String>(2)?,
                     r.get::<_, String>(3)?,
                     r.get::<_, i64>(4)?,
-                    r.get::<_, Option<String>>(5)?,
                 ),
             ))
         })?
-        .collect::<Result<std::collections::HashMap<i64, (String, String, String, i64, Option<String>)>>>()?;
+        .collect::<Result<std::collections::HashMap<i64, (String, String, String, i64)>>>()?;
     for row in rows {
         let wanted = (
             row.name.to_string(),
             row.city.to_string(),
             row.date.to_string(),
             row.weight,
-            row.archived_at.map(str::to_string),
         );
         match stored.get(&row.id) {
             None => diff.missing.push(row.id.to_string()),
@@ -709,7 +671,7 @@ fn compare_auditions(db: &Connection, rows: &[SeedAudition], diff: &mut TableDif
 
 fn compare_pieces(db: &Connection, rows: &[SeedPiece], diff: &mut TableDiff) -> Result<()> {
     let mut stmt = db.prepare(
-        "SELECT id, composer, work, movement, excerpt, kind, difficulty, target_bpm, archived_at
+        "SELECT id, composer, work, movement, excerpt, kind, difficulty, target_bpm
         FROM pieces",
     )?;
     let stored = stmt
@@ -724,23 +686,13 @@ fn compare_pieces(db: &Connection, rows: &[SeedPiece], diff: &mut TableDiff) -> 
                     r.get::<_, String>(5)?,
                     r.get::<_, i64>(6)?,
                     r.get::<_, Option<i64>>(7)?,
-                    r.get::<_, Option<String>>(8)?,
                 ),
             ))
         })?
         .collect::<Result<
             std::collections::HashMap<
                 i64,
-                (
-                    String,
-                    String,
-                    String,
-                    String,
-                    String,
-                    i64,
-                    Option<i64>,
-                    Option<String>,
-                ),
+                (String, String, String, String, String, i64, Option<i64>),
             >,
         >>()?;
     for row in rows {
@@ -752,7 +704,6 @@ fn compare_pieces(db: &Connection, rows: &[SeedPiece], diff: &mut TableDiff) -> 
             row.kind.to_string(),
             row.difficulty,
             row.target_bpm,
-            row.archived_at.map(str::to_string),
         );
         match stored.get(&row.id) {
             None => diff.missing.push(row.id.to_string()),
@@ -1028,8 +979,8 @@ mod tests {
         assert_eq!(count(&db, "auditions"), 6);
         assert_eq!(count(&db, "audition_links"), 18);
         assert_eq!(count(&db, "audition_rounds"), 13);
-        assert_eq!(count(&db, "pieces"), 45);
-        assert_eq!(count(&db, "piece_audition"), 85);
+        assert_eq!(count(&db, "pieces"), 42);
+        assert_eq!(count(&db, "piece_audition"), 82);
         assert_eq!(count(&db, "segments"), 25);
         assert_eq!(count(&db, "link_segments"), 30);
         assert_eq!(count(&db, "users"), 0);
@@ -1175,7 +1126,6 @@ mod tests {
             city: "",
             date: "2027-03-01",
             weight: 2,
-            archived_at: None,
         }];
         let extra = SeedData {
             auditions: EXTRA_AUDITIONS,
@@ -1193,7 +1143,7 @@ mod tests {
             .query_row("SELECT name FROM auditions WHERE id=7", [], |r| r.get(0))
             .unwrap();
         assert_eq!(name, "Extra");
-        assert_eq!(count(&db, "pieces"), 45);
+        assert_eq!(count(&db, "pieces"), 42);
     }
 
     /// Every table, one row deleted and one row changed: the

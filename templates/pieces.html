@@ -19,21 +19,19 @@
 <option value="excerpt" {% if FilterKind == "excerpt" %}selected{% endif %}>{{ t("kind.excerpts_plural") }}</option>
 <option value="solo" {% if FilterKind == "solo" %}selected{% endif %}>{{ t("kind.solos_plural") }}</option>
 </select></label>
-<label class="check"><input type="checkbox" name="archiviati" value="1" {% if ShowArchived %}checked{% endif %} onchange="this.form.submit()"> {{ t("pieces.show_archived") }}</label>
 </form>
 
 <div class="stack">
 {% for p in Pieces %}
-<article class="card reveal {% if p.Archived %}archived{% endif %}">
+<article class="card reveal">
 <span class="prep-pin pin-corner" tabindex="0" aria-label="{{ t("prep.label", pct(p.Prep)) }}"><span class="prep-dot lv{{ p.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(p.Prep)) }}</span></span>
 <div class="card-head">
 <strong><a class="card-link" href="/diary/piece/{{ p.ID }}">{{ p.Composer }} — {{ p.Work }}</a></strong>
-{% if p.Archived %}<span class="badge muted">{{ t("pieces.archived_badge") }}</span>
-{% elif not p.HasActive %}<span class="badge muted">{{ t("pieces.no_active") }}</span>{% endif %}
+{% if not p.HasActive %}<span class="badge muted">{{ t("pieces.no_active") }}</span>{% endif %}
 </div>
 <div class="meta movement-row"><span class="badge kind">{{ kindLabel(p.Kind) }}</span>{% if p.Movement %}<span>{{ p.Movement }}</span>{% endif %}</div>
 {% if p.Auditions %}<div class="chips">
-{% for c in p.Auditions %}<span class="chip{% if c.Archived %} muted{% endif %}">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}
+{% for c in p.Auditions %}<span class="chip{% if c.Past %} muted{% endif %}">{{ c.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(c.Prep)) }}"><span class="prep-dot lv{{ c.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(c.Prep)) }}</span></span></span>{% endfor %}
 </div>{% endif %}
 </article>
 {% else %}

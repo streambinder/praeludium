@@ -54,8 +54,9 @@ pub struct Audition {
     pub date: String, // YYYY-MM-DD
     #[serde(rename = "Weight")]
     pub weight: i64,
-    #[serde(rename = "Archived")]
-    pub archived: bool,
+    /// True when the audition date is before today.
+    #[serde(rename = "Past")]
+    pub past: bool,
     /// Enrolled for the current user: the audition feeds
     /// their daily plan. Set only through the reads, from
     /// the enrollments table.
@@ -114,11 +115,9 @@ pub struct Piece {
     /// Optional target tempo; None means no tempo signal.
     #[serde(rename = "TargetBPM", serialize_with = "ser_null_i64")]
     pub target_bpm: Option<i64>,
-    #[serde(rename = "Archived")]
-    pub archived: bool,
     #[serde(rename = "Auditions")]
     pub auditions: Vec<Audition>,
-    /// At least one non-archived audition with date >= today.
+    /// At least one audition with date >= today.
     #[serde(rename = "HasActive")]
     pub has_active: bool,
     /// Preparation level 0..4, stamped on demand (not persisted).
@@ -281,7 +280,6 @@ fn migrate(db: &Connection) -> Result<()> {
 			city TEXT NOT NULL DEFAULT '',
 			audition_date TEXT NOT NULL,
 			weight INTEGER NOT NULL DEFAULT 1,
-			archived_at TEXT,
 			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 		)",
         "CREATE TABLE IF NOT EXISTS pieces(
@@ -291,7 +289,6 @@ fn migrate(db: &Connection) -> Result<()> {
 			movement TEXT NOT NULL DEFAULT '',
 			excerpt TEXT NOT NULL DEFAULT '',
 			kind TEXT NOT NULL DEFAULT 'excerpt',
-			archived_at TEXT,
 			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
 			difficulty INTEGER NOT NULL DEFAULT 3,
 			target_bpm INTEGER
@@ -448,7 +445,7 @@ fn scan_audition(row: &rusqlite::Row) -> Result<Audition> {
         name: row.get(1)?,
         date: row.get(2)?,
         weight: row.get(3)?,
-        archived: row.get::<_, i64>(4)? != 0,
+        past: row.get::<_, i64>(4)? != 0,
         enrolled: row.get::<_, i64>(5)? != 0,
         ..Default::default()
     })
@@ -459,27 +456,22 @@ impl App {
         self.db.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    pub fn list_auditions(&self, include_archived: bool) -> Result<Vec<Audition>> {
-        let mut q = String::from(
-            "SELECT id, name, audition_date, weight, archived_at IS NOT NULL,
-			EXISTS(SELECT 1 FROM enrollments e WHERE e.user_id=?1 AND e.audition_id=auditions.id) FROM auditions",
-        );
-        if !include_archived {
-            q += " WHERE archived_at IS NULL";
-        }
-        q += " ORDER BY archived_at IS NOT NULL, audition_date";
+    pub fn list_auditions(&self, today: &str) -> Result<Vec<Audition>> {
+        let q = "SELECT id, name, audition_date, weight, audition_date < ?2,
+			EXISTS(SELECT 1 FROM enrollments e WHERE e.user_id=?1 AND e.audition_id=auditions.id) FROM auditions
+			ORDER BY audition_date < ?2, audition_date";
         let db = self.conn();
-        let mut stmt = db.prepare(&q)?;
+        let mut stmt = db.prepare(q)?;
         let rows = stmt
-            .query_map(params![self.current_user_id], scan_audition)?
+            .query_map(params![self.current_user_id, today], scan_audition)?
             .collect::<Result<Vec<_>>>()?;
         Ok(rows)
     }
 
-    pub fn piece_auditions(&self, piece_id: i64) -> Result<Vec<Audition>> {
+    pub fn piece_auditions(&self, piece_id: i64, today: &str) -> Result<Vec<Audition>> {
         let db = self.conn();
         let mut stmt = db.prepare(
-            "SELECT c.id, c.name, c.audition_date, c.weight, c.archived_at IS NOT NULL, pc.note,
+            "SELECT c.id, c.name, c.audition_date, c.weight, c.audition_date < ?3, pc.note,
 			pc.round_id, COALESCE(rd.name, ''), pc.optional,
 			EXISTS(SELECT 1 FROM enrollments e WHERE e.user_id=?2 AND e.audition_id=c.id)
 			FROM auditions c JOIN piece_audition pc ON pc.audition_id=c.id
@@ -487,13 +479,13 @@ impl App {
 			WHERE pc.piece_id=?1 ORDER BY c.audition_date",
         )?;
         let mut rows = stmt
-            .query_map(params![piece_id, self.current_user_id], |row| {
+            .query_map(params![piece_id, self.current_user_id, today], |row| {
                 Ok(Audition {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     date: row.get(2)?,
                     weight: row.get(3)?,
-                    archived: row.get::<_, i64>(4)? != 0,
+                    past: row.get::<_, i64>(4)? != 0,
                     note: row.get(5)?,
                     round_id: row.get(6)?,
                     round_name: row.get(7)?,
@@ -673,16 +665,10 @@ impl App {
     /// Return the pieces matching the filters; query is a free-text
     /// search over every text field of the piece (composer, work,
     /// movement, kind) plus its audition names and excerpts.
-    pub fn list_pieces(
-        &self,
-        audition_id: i64,
-        kind: &str,
-        include_archived: bool,
-        query: &str,
-    ) -> Result<Vec<Piece>> {
+    pub fn list_pieces(&self, audition_id: i64, kind: &str, query: &str) -> Result<Vec<Piece>> {
         let mut q = String::from(
             "SELECT DISTINCT p.id, p.composer, p.work, p.movement, p.kind, p.difficulty,
-			p.archived_at IS NOT NULL, p.target_bpm FROM pieces p",
+			p.target_bpm FROM pieces p",
         );
         let mut args: Vec<rusqlite::types::Value> = Vec::new();
         let mut where_clause = String::new();
@@ -694,9 +680,6 @@ impl App {
         if kind == KIND_EXCERPT || kind == KIND_SOLO {
             where_clause += " AND p.kind=?";
             args.push(rusqlite::types::Value::Text(kind.to_string()));
-        }
-        if !include_archived {
-            where_clause += " AND p.archived_at IS NULL";
         }
         let query = query.trim();
         if !query.is_empty() {
@@ -720,8 +703,8 @@ impl App {
         };
         let today = today_str();
         for piece in &mut pieces {
-            let cs = self.piece_auditions(piece.id)?;
-            piece.has_active = cs.iter().any(|c| !c.archived && c.date >= today);
+            let cs = self.piece_auditions(piece.id, &today)?;
+            piece.has_active = cs.iter().any(|c| c.date >= today);
             piece.auditions = cs;
         }
         Ok(pieces)
@@ -731,13 +714,13 @@ impl App {
         let mut piece = {
             let db = self.conn();
             db.query_row(
-                "SELECT id, composer, work, movement, kind, difficulty, archived_at IS NOT NULL, target_bpm
+                "SELECT id, composer, work, movement, kind, difficulty, target_bpm
 				FROM pieces WHERE id=?",
                 params![id],
                 scan_piece,
             )?
         };
-        piece.auditions = self.piece_auditions(id)?;
+        piece.auditions = self.piece_auditions(id, &today_str())?;
         Ok(piece)
     }
 
@@ -883,8 +866,7 @@ fn scan_piece(row: &rusqlite::Row) -> Result<Piece> {
         movement: row.get(3)?,
         kind: row.get(4)?,
         difficulty: row.get(5)?,
-        archived: row.get::<_, i64>(6)? != 0,
-        target_bpm: row.get(7)?,
+        target_bpm: row.get(6)?,
         ..Default::default()
     })
 }
@@ -946,6 +928,9 @@ mod tests {
         let cols = table_columns(&db, "pieces").unwrap();
         assert!(cols.contains("difficulty"));
         assert!(cols.contains("target_bpm"));
+        assert!(!cols.contains("archived_at"));
+        let cols = table_columns(&db, "auditions").unwrap();
+        assert!(!cols.contains("archived_at"));
         let cols = table_columns(&db, "piece_audition").unwrap();
         assert!(cols.contains("excerpt"));
         assert!(cols.contains("note"));
@@ -991,7 +976,7 @@ mod tests {
             data_dir: PathBuf::from("/tmp"),
             current_user_id: SEEDED_USER_ID,
         };
-        let auditions = app.list_auditions(false).unwrap();
+        let auditions = app.list_auditions("2026-10-20").unwrap();
         let venezia = auditions
             .iter()
             .find(|a| a.name == "Venezia")
@@ -1107,7 +1092,7 @@ mod tests {
             .unwrap();
             (aid, pid)
         };
-        let pieces = app.list_pieces(0, "", false, "hayd").unwrap();
+        let pieces = app.list_pieces(0, "", "hayd").unwrap();
         let mine: Vec<_> = pieces
             .iter()
             .filter(|p| p.work == "Concerto in Do")
@@ -1115,7 +1100,7 @@ mod tests {
         assert_eq!(mine.len(), 1);
         assert_eq!(mine[0].composer, "Haydn");
         assert_eq!(mine[0].auditions.len(), 1);
-        assert_eq!(app.list_pieces(0, "", false, "zzz").unwrap().len(), 0);
+        assert_eq!(app.list_pieces(0, "", "zzz").unwrap().len(), 0);
         let piece = app.get_piece(pid).unwrap();
         assert_eq!(piece.auditions[0].name, "Roma");
     }

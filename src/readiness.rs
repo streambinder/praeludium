@@ -166,7 +166,7 @@ impl App {
     /// the scope of each link: a session on a segment the link
     /// does not ask for does not touch the piece for this audition.
     pub fn readiness_coverage(&self, c: &Audition, since: &str) -> Result<StatRow> {
-        let pieces = self.list_pieces(c.id, "", false, "")?;
+        let pieces = self.list_pieces(c.id, "", "")?;
         if pieces.is_empty() {
             return Ok(StatRow::default());
         }
@@ -630,7 +630,7 @@ mod scope_tests {
         );
         // Weakest: for audition 2, piece 3 earns nothing from
         // its out-of-scope session and ranks first at zero.
-        let pieces = app.list_pieces(a2, "", false, "").unwrap();
+        let pieces = app.list_pieces(a2, "", "").unwrap();
         let rows = app.readiness_weakest(a2, &pieces).unwrap();
         assert_eq!(rows[0].piece_id, p3);
         assert_eq!(rows[0].prep, 0);

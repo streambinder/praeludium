@@ -9,7 +9,7 @@
 {% if Chips %}
 <div class="chips map-filters">
 <a class="chip{% if TuttiOn %} on{% endif %}" href="/diary">{{ t("diary.all") }}</a>
-{% for chip in Chips %}<a class="chip{% if chip.Selected %} on{% endif %}{% if chip.Archived %} muted{% endif %}" href="{{ chip.Href }}">{{ chip.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(chip.Prep)) }}"><span class="prep-dot lv{{ chip.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(chip.Prep)) }}</span></span></a>{% endfor %}
+{% for chip in Chips %}<a class="chip{% if chip.Selected %} on{% endif %}{% if chip.Past %} muted{% endif %}" href="{{ chip.Href }}">{{ chip.Name }}<span class="prep-pin" tabindex="0" aria-label="{{ t("prep.label", pct(chip.Prep)) }}"><span class="prep-dot lv{{ chip.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(chip.Prep)) }}</span></span></a>{% endfor %}
 </div>
 {% endif %}
 {% if PrepMap %}

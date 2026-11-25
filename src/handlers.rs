@@ -227,23 +227,23 @@ impl App {
     }
 
     /// Load the audition named by the URL path.
-    pub fn audition_or_404(&self, raw_id: &str) -> Result<Audition, Response> {
+    pub fn audition_or_404(&self, raw_id: &str, today: &str) -> Result<Audition, Response> {
         let Some(id) = path_id(raw_id) else {
             return Err(not_found());
         };
         let db = self.db.lock().unwrap_or_else(|p| p.into_inner());
         db.query_row(
-            "SELECT id, name, audition_date, weight, archived_at IS NOT NULL,
+            "SELECT id, name, audition_date, weight, audition_date < ?3,
 			EXISTS(SELECT 1 FROM enrollments e WHERE e.user_id=?2 AND e.audition_id=auditions.id)
 			FROM auditions WHERE id=?1",
-            params![id, self.current_user_id],
+            params![id, self.current_user_id, today],
             |row| {
                 Ok(Audition {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     date: row.get(2)?,
                     weight: row.get(3)?,
-                    archived: row.get::<_, i64>(4)? != 0,
+                    past: row.get::<_, i64>(4)? != 0,
                     enrolled: row.get::<_, i64>(5)? != 0,
                     ..Default::default()
                 })
@@ -405,14 +405,14 @@ pub struct TodayData {
     pub segments_json: String,
 }
 
-/// The piece's non-archived, not-yet-held, enrolled auditions
+/// The piece's not-yet-held, enrolled auditions
 /// with their weights, plus the days until the nearest one.
 pub fn upcoming_auditions(p: &Piece, today: &str) -> DbResult<(Vec<Audition>, Vec<i64>, i64)> {
     let mut upcoming = Vec::new();
     let mut weights = Vec::new();
     let mut days: i64 = -1;
     for c in &p.auditions {
-        if c.archived || !c.enrolled || c.date.as_str() < today {
+        if !c.enrolled || c.date.as_str() < today {
             continue;
         }
         upcoming.push(c.clone());
@@ -751,7 +751,7 @@ impl App {
 
     pub fn build_plan(&self, today: &str) -> DbResult<Vec<PlanItem>> {
         let coeffs = self.get_coeffs()?;
-        let pieces = self.list_pieces(0, "", false, "")?;
+        let pieces = self.list_pieces(0, "", "")?;
         let pools = self.plan_pools(&pieces, today)?;
         let mut excluded: HashMap<i64, Vec<(i64, Option<i64>)>> = HashMap::new();
         for pool in &pools {
@@ -785,7 +785,7 @@ impl App {
         for t in &tiles {
             prep.insert(t.piece_id, t.prep);
         }
-        let auditions = self.list_auditions(false)?;
+        let auditions = self.list_auditions(today)?;
         let mut out = Vec::new();
         for c in &auditions {
             if c.date.as_str() < today || !c.enrolled {
@@ -845,7 +845,7 @@ pub fn sort_plan_items(items: &mut [PlanItem]) {
 #[derive(Debug, Clone)]
 pub struct ForecastInput {
     pub id: i64,
-    /// Linked, non-archived, still upcoming today.
+    /// Linked, still upcoming today.
     pub auditions: Vec<Audition>,
     pub conf: f64,
     /// Piece difficulty 1..5.
@@ -866,7 +866,7 @@ pub struct PlanForecaster {
 impl App {
     pub fn new_plan_forecaster(&self, today: &str) -> DbResult<PlanForecaster> {
         let coeffs = self.get_coeffs()?;
-        let pieces = self.list_pieces(0, "", false, "")?;
+        let pieces = self.list_pieces(0, "", "")?;
         let mut f = PlanForecaster {
             coeffs,
             inputs: Vec::new(),
@@ -1426,7 +1426,7 @@ pub async fn handle_today(State(app): State<Shared>, headers: HeaderMap) -> Resp
         data.logged_pct = data.logged * 100 / data.budget;
         data.budget_pct = data.logged_pct.min(100);
     }
-    let pieces = match app.list_pieces(0, "", false, "") {
+    let pieces = match app.list_pieces(0, "", "") {
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
@@ -1705,8 +1705,6 @@ pub struct PiecesData {
     pub filter_kind: String,
     #[serde(rename = "Search")]
     pub search: String,
-    #[serde(rename = "ShowArchived")]
-    pub show_archived: bool,
     /// Raw query of the current list view, for return redirects.
     #[serde(rename = "Query")]
     pub query: String,
@@ -1723,15 +1721,14 @@ pub async fn handle_pieces(
     let audition_id = form.int("audition", 0);
     let kind = query.get("kind").cloned().unwrap_or_default();
     let search = query.get("q").cloned().unwrap_or_default();
-    let show_archived = query.get("archiviati").map(|v| v == "1").unwrap_or(false);
-    let mut pieces = match app.list_pieces(audition_id, &kind, show_archived, &search) {
+    let mut pieces = match app.list_pieces(audition_id, &kind, &search) {
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
     if let Err(e) = app.stamp_prep_levels(&mut pieces) {
         return err500(&e);
     }
-    let auditions = match app.list_auditions(false) {
+    let auditions = match app.list_auditions(&today_str()) {
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
@@ -1746,7 +1743,6 @@ pub async fn handle_pieces(
             filter_audition: audition_id,
             filter_kind: kind,
             search,
-            show_archived,
             query: uri.query().unwrap_or("").to_string(),
         },
     )
@@ -1795,8 +1791,6 @@ pub async fn handle_set_baseline(
 pub struct AuditionRow {
     #[serde(flatten)]
     pub audition: Audition,
-    #[serde(rename = "Concluded")]
-    pub concluded: bool,
     #[serde(rename = "Pieces")]
     pub pieces: i64,
     #[serde(rename = "Links")]
@@ -1818,7 +1812,7 @@ pub struct AuditionsData {
 pub async fn handle_auditions(State(app): State<Shared>, headers: HeaderMap) -> Response {
     let lang = req_lang(&headers);
     let today = today_str();
-    let cs = match app.list_auditions(true) {
+    let cs = match app.list_auditions(&today) {
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
@@ -1846,7 +1840,6 @@ pub async fn handle_auditions(State(app): State<Shared>, headers: HeaderMap) -> 
             Err(e) => return err500(&e),
         };
         rows.push(AuditionRow {
-            concluded: !c.archived && c.date < today,
             pieces: n,
             links: nl,
             audition: c.clone(),
@@ -1884,7 +1877,7 @@ pub async fn handle_toggle_enrollment(
         Ok(v) => v,
         Err(r) => return r,
     };
-    let c = match app.audition_or_404(&id) {
+    let c = match app.audition_or_404(&id, &today_str()) {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -1928,8 +1921,8 @@ pub struct AuditionDetailData {
     pub nav: String,
     #[serde(rename = "Audition")]
     pub audition: Audition,
-    #[serde(rename = "Concluded")]
-    pub concluded: bool,
+    #[serde(rename = "Past")]
+    pub past: bool,
     #[serde(rename = "Links")]
     pub links: Vec<crate::db::AuditionLink>,
     #[serde(rename = "Pieces")]
@@ -1952,7 +1945,7 @@ pub async fn handle_audition_detail(
     Path(id): Path<String>,
 ) -> Response {
     let lang = req_lang(&headers);
-    let mut c = match app.audition_or_404(&id) {
+    let mut c = match app.audition_or_404(&id, &today_str()) {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -1960,7 +1953,7 @@ pub async fn handle_audition_detail(
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
-    let mut pieces = match app.list_pieces(c.id, "", false, "") {
+    let mut pieces = match app.list_pieces(c.id, "", "") {
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
@@ -2033,7 +2026,7 @@ pub async fn handle_audition_detail(
         Err(e) => return err500(&e),
     };
     crate::mocks::stamp_mock_means(&mut mocks, &lang);
-    let concluded = !c.archived && c.date < today;
+    let past = c.past;
     render(
         &headers,
         "audition_detail.html",
@@ -2041,7 +2034,7 @@ pub async fn handle_audition_detail(
             title: c.name.clone(),
             nav: "auditions".to_string(),
             audition: c,
-            concluded,
+            past,
             links,
             pieces,
             piece_count,
@@ -2071,8 +2064,8 @@ pub struct AuditionChip {
     pub id: i64,
     #[serde(rename = "Name")]
     pub name: String,
-    #[serde(rename = "Archived")]
-    pub archived: bool,
+    #[serde(rename = "Past")]
+    pub past: bool,
     #[serde(rename = "Selected")]
     pub selected: bool,
     #[serde(rename = "Href")]
@@ -2178,7 +2171,7 @@ pub async fn handle_diary(
             Err(e) => return err500(&e),
         }
     };
-    let auditions = match app.list_auditions(true) {
+    let auditions = match app.list_auditions(&today_str()) {
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
@@ -2202,7 +2195,7 @@ pub async fn handle_diary(
         chips.push(AuditionChip {
             id: c.id,
             name: c.name.clone(),
-            archived: c.archived,
+            past: c.past,
             selected: valid.contains(&c.id),
             href: audition_filter_href(&next),
             level: chip_levels.get(&c.id).copied().unwrap_or(0),
@@ -2370,7 +2363,7 @@ impl App {
         if skipped_ids.is_empty() {
             return Ok(());
         }
-        let pieces = self.list_pieces(0, "", false, "")?;
+        let pieces = self.list_pieces(0, "", "")?;
         let by_id: HashMap<i64, Piece> = pieces.iter().map(|p| (p.id, p.clone())).collect();
         for (pid, is_auto) in skipped_ids {
             let Some(p) = by_id.get(pid) else { continue };
@@ -2850,7 +2843,7 @@ pub async fn handle_settings(State(app): State<Shared>, headers: HeaderMap) -> R
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
-    let auditions = match app.list_auditions(false) {
+    let auditions = match app.list_auditions(&today_str()) {
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
@@ -2960,8 +2953,8 @@ pub struct ReadinessData {
     pub audition: Audition,
     #[serde(rename = "DaysLeft")]
     pub days_left: i64,
-    #[serde(rename = "Concluded")]
-    pub concluded: bool,
+    #[serde(rename = "Past")]
+    pub past: bool,
     #[serde(rename = "IsToday")]
     pub is_today: bool,
     #[serde(rename = "Coverage")]
@@ -2998,7 +2991,7 @@ pub async fn handle_readiness(
     Path(id): Path<String>,
 ) -> Response {
     let lang = req_lang(&headers);
-    let c = match app.audition_or_404(&id) {
+    let c = match app.audition_or_404(&id, &today_str()) {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -3010,7 +3003,7 @@ pub async fn handle_readiness(
         title: tr(&lang, "ready.title", &[]),
         nav: "auditions".to_string(),
         days_left,
-        concluded: days_left < 0,
+        past: c.past,
         is_today: days_left == 0,
         audition: c.clone(),
         ..Default::default()
@@ -3047,7 +3040,7 @@ pub async fn handle_readiness(
         }
         Err(e) => return err500(&e),
     }
-    let pieces = match app.list_pieces(c.id, "", false, "") {
+    let pieces = match app.list_pieces(c.id, "", "") {
         Ok(v) => v,
         Err(e) => return err500(&e),
     };
@@ -3098,7 +3091,7 @@ pub async fn handle_mock_setup(
     Path(id): Path<String>,
 ) -> Response {
     let lang = req_lang(&headers);
-    let c = match app.audition_or_404(&id) {
+    let c = match app.audition_or_404(&id, &today_str()) {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -3156,7 +3149,7 @@ pub async fn handle_mock_create(
     Path(id): Path<String>,
     req: axum::extract::Request,
 ) -> Response {
-    let c = match app.audition_or_404(&id) {
+    let c = match app.audition_or_404(&id, &today_str()) {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -3252,7 +3245,7 @@ pub async fn handle_mock_run(
     Path((id, mock_id_raw)): Path<(String, String)>,
 ) -> Response {
     let lang = req_lang(&headers);
-    let c = match app.audition_or_404(&id) {
+    let c = match app.audition_or_404(&id, &today_str()) {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -3307,7 +3300,7 @@ pub async fn handle_mock_rate(
     Path((id, mock_id_raw)): Path<(String, String)>,
     req: axum::extract::Request,
 ) -> Response {
-    let c = match app.audition_or_404(&id) {
+    let c = match app.audition_or_404(&id, &today_str()) {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -3343,7 +3336,7 @@ pub async fn handle_mock_delete(
     State(app): State<Shared>,
     Path((id, mock_id_raw)): Path<(String, String)>,
 ) -> Response {
-    let c = match app.audition_or_404(&id) {
+    let c = match app.audition_or_404(&id, &today_str()) {
         Ok(c) => c,
         Err(r) => return r,
     };
@@ -4056,9 +4049,9 @@ mod tests {
         assert!(app.piece_or_404(&p1.to_string()).is_ok());
         assert!(app.piece_or_404("abc").is_err());
         assert!(app.piece_or_404("999").is_err());
-        assert!(app.audition_or_404(&a1.to_string()).is_ok());
-        assert!(app.audition_or_404("0").is_err());
-        assert!(app.audition_or_404("999").is_err());
+        assert!(app.audition_or_404(&a1.to_string(), "2026-10-20").is_ok());
+        assert!(app.audition_or_404("0", "2026-10-20").is_err());
+        assert!(app.audition_or_404("999", "2026-10-20").is_err());
         assert!(app.valued_piece_ids().unwrap().is_empty());
         seed_session(&app, "2026-10-19", p1, 0, 0, "baseline");
         seed_session(&app, "2026-10-19", p2, 10, 0, "");
@@ -4085,10 +4078,7 @@ mod tests {
         let p = Piece {
             auditions: vec![
                 audition(1, "2026-01-01", 3),
-                Audition {
-                    archived: true,
-                    ..audition(2, "2027-01-01", 3)
-                },
+                audition(2, "2026-10-19", 3),
                 Audition {
                     enrolled: false,
                     ..audition(5, "2026-10-21", 5)

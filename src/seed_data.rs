@@ -28,7 +28,6 @@ static AUDITIONS: &[SeedAudition] = &[
         city: "Roma",
         date: "2027-01-08",
         weight: 5,
-        archived_at: None,
     },
     SeedAudition {
         id: 2,
@@ -36,7 +35,6 @@ static AUDITIONS: &[SeedAudition] = &[
         city: "Roma",
         date: "2026-11-23",
         weight: 4,
-        archived_at: Some("2026-11-15T15:38:01.352Z"),
     },
     SeedAudition {
         id: 3,
@@ -44,7 +42,6 @@ static AUDITIONS: &[SeedAudition] = &[
         city: "Napoli",
         date: "2026-12-14",
         weight: 4,
-        archived_at: None,
     },
     SeedAudition {
         id: 4,
@@ -52,7 +49,6 @@ static AUDITIONS: &[SeedAudition] = &[
         city: "Cagliari",
         date: "2026-11-16",
         weight: 3,
-        archived_at: Some("2026-11-15T15:37:29.084Z"),
     },
     SeedAudition {
         id: 5,
@@ -60,7 +56,6 @@ static AUDITIONS: &[SeedAudition] = &[
         city: "Cagliari",
         date: "2026-11-17",
         weight: 3,
-        archived_at: Some("2026-11-15T15:37:36.803Z"),
     },
     SeedAudition {
         id: 6,
@@ -68,7 +63,6 @@ static AUDITIONS: &[SeedAudition] = &[
         city: "Venezia",
         date: "2027-02-15",
         weight: 3,
-        archived_at: None,
     },
 ];
 
@@ -274,7 +268,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 4,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 2,
@@ -285,7 +278,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 2,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 3,
@@ -296,7 +288,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 4,
@@ -307,18 +298,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
-    },
-    SeedPiece {
-        id: 5,
-        composer: "Beethoven",
-        work: "Sinfonia n. 5",
-        movement: "III mov.",
-        excerpt: "",
-        kind: "excerpt",
-        difficulty: 1,
-        target_bpm: None,
-        archived_at: Some("2026-10-02T08:20:10.375Z"),
     },
     SeedPiece {
         id: 6,
@@ -329,7 +308,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 4,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 7,
@@ -340,7 +318,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 4,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 8,
@@ -351,7 +328,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 4,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 9,
@@ -362,7 +338,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 4,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 10,
@@ -373,7 +348,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 4,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 11,
@@ -384,7 +358,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 4,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 12,
@@ -395,7 +368,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 5,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 13,
@@ -406,7 +378,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 14,
@@ -417,7 +388,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 15,
@@ -428,7 +398,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 16,
@@ -439,7 +408,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 5,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 17,
@@ -450,7 +418,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 18,
@@ -461,7 +428,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 19,
@@ -472,7 +438,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 4,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 20,
@@ -483,7 +448,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 5,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 21,
@@ -494,7 +458,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 2,
         target_bpm: None,
-        archived_at: Some("2026-10-24T21:53:35.556Z"),
     },
     SeedPiece {
         id: 22,
@@ -505,7 +468,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 5,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 23,
@@ -516,7 +478,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 24,
@@ -527,7 +488,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 5,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 25,
@@ -538,7 +498,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 5,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 26,
@@ -549,7 +508,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 4,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 27,
@@ -560,7 +518,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 3,
         target_bpm: None,
-        archived_at: Some("2026-10-02T08:28:17.008Z"),
     },
     SeedPiece {
         id: 28,
@@ -571,7 +528,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 29,
@@ -582,7 +538,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 3,
         target_bpm: None,
-        archived_at: Some("2026-10-24T11:07:27.080Z"),
     },
     SeedPiece {
         id: 30,
@@ -593,7 +548,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 3,
         target_bpm: None,
-        archived_at: Some("2026-10-02T08:28:02.373Z"),
     },
     SeedPiece {
         id: 31,
@@ -604,18 +558,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
-    },
-    SeedPiece {
-        id: 32,
-        composer: "Bach",
-        work: "Suite n. 2",
-        movement: "Preludio, Sarabanda, Giga",
-        excerpt: "",
-        kind: "solo",
-        difficulty: 5,
-        target_bpm: None,
-        archived_at: Some("2026-10-24T21:53:35.556Z"),
     },
     SeedPiece {
         id: 33,
@@ -626,7 +568,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 34,
@@ -637,18 +578,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 4,
         target_bpm: None,
-        archived_at: None,
-    },
-    SeedPiece {
-        id: 35,
-        composer: "Hindemith",
-        work: "Sonata per violoncello solo op. 25 n. 3",
-        movement: "",
-        excerpt: "",
-        kind: "solo",
-        difficulty: 3,
-        target_bpm: None,
-        archived_at: Some("2026-10-24T21:53:35.556Z"),
     },
     SeedPiece {
         id: 36,
@@ -659,7 +588,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 2,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 37,
@@ -670,7 +598,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "excerpt",
         difficulty: 2,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 38,
@@ -681,7 +608,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 5,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 39,
@@ -692,7 +618,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 5,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 40,
@@ -703,7 +628,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 5,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 41,
@@ -714,7 +638,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 42,
@@ -725,7 +648,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 43,
@@ -736,7 +658,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 44,
@@ -747,7 +668,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
     SeedPiece {
         id: 45,
@@ -758,7 +678,6 @@ static PIECES: &[SeedPiece] = &[
         kind: "solo",
         difficulty: 3,
         target_bpm: None,
-        archived_at: None,
     },
 ];
 
@@ -858,14 +777,6 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         note: "",
         round_id: None,
         optional: true,
-    },
-    SeedPieceAudition {
-        piece_id: 35,
-        audition_id: 1,
-        excerpt: "",
-        note: "",
-        round_id: None,
-        optional: false,
     },
     SeedPieceAudition {
         piece_id: 41,
@@ -1020,14 +931,6 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         optional: false,
     },
     SeedPieceAudition {
-        piece_id: 32,
-        audition_id: 2,
-        excerpt: "eliminatoria",
-        note: "",
-        round_id: None,
-        optional: false,
-    },
-    SeedPieceAudition {
         piece_id: 33,
         audition_id: 2,
         excerpt: "",
@@ -1081,14 +984,6 @@ static PIECE_AUDITIONS: &[SeedPieceAudition] = &[
         excerpt: "da b.27 (lett. A)",
         note: "",
         round_id: Some(7),
-        optional: false,
-    },
-    SeedPieceAudition {
-        piece_id: 5,
-        audition_id: 3,
-        excerpt: "Allegro, b.132–209 (lett. B)",
-        note: "",
-        round_id: None,
         optional: false,
     },
     SeedPieceAudition {
