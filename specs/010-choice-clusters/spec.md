@@ -4,7 +4,9 @@
 
 **Created**: 2026-11-25
 
-**Status**: Draft
+**Status**: Complete
+
+**Errata** (2026-11-25, found during implementation): the task text of T012 said eight links with a cluster value. The ratified spec (FR-5) sets seven; Piatti (34, 1) stays null per Q-2. The seed-state test asserts seven links and three clusters.
 
 **Input**: User description: "Sì aggiorniamo il codice per permettere a prescindere dal round di fare cluster di pezzi a scelta." The owner corrects the San Carlo pool of cycle 009, from the bando screenshot sent on 2026-11-25 at 20:10: "da bando san Carlo dice a scelta tra Dvorak, Schumann, Elgar; Haydn non è a scelta"
 
