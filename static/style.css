@@ -417,7 +417,7 @@ h2 {
   box-shadow: var(--shadow-lift);
 }
 
-.card.archived {
+.card.past {
   opacity: 0.62;
 }
 

@@ -3,7 +3,7 @@
 <div class="page-head">
 <span class="overline">{{ t("ready.title") }}</span>
 <h1>{{ Audition.Name }}</h1>
-<p class="meta">{% if Concluded %}{{ t("auditions.concluded_badge") }}{% elif IsToday %}{{ t("readiness.today") }}{% else %}{{ tp("readiness.days_left", DaysLeft) }}{% endif %} · {{ t("audition.date_label", dateIT(Audition.Date)) }}</p>
+<p class="meta">{% if Past %}{{ t("auditions.past_badge") }}{% elif IsToday %}{{ t("readiness.today") }}{% else %}{{ tp("readiness.days_left", DaysLeft) }}{% endif %} · {{ t("audition.date_label", dateIT(Audition.Date)) }}</p>
 </div>
 
 <div class="stack">

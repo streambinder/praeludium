@@ -159,7 +159,7 @@ impl App {
             Some(round) => {
                 let mut stmt = db.prepare(
                     "SELECT pc.piece_id FROM piece_audition pc JOIN pieces p ON p.id = pc.piece_id
-					WHERE pc.audition_id=? AND p.archived_at IS NULL AND (pc.round_id IS NULL OR pc.round_id=?)",
+					WHERE pc.audition_id=? AND (pc.round_id IS NULL OR pc.round_id=?)",
                 )?;
                 stmt.query_map(params![audition_id, round], |row| row.get::<_, i64>(0))?
                     .collect::<Result<Vec<_>>>()?
@@ -167,7 +167,7 @@ impl App {
             None => {
                 let mut stmt = db.prepare(
                     "SELECT pc.piece_id FROM piece_audition pc JOIN pieces p ON p.id = pc.piece_id
-					WHERE pc.audition_id=? AND p.archived_at IS NULL",
+					WHERE pc.audition_id=?",
                 )?;
                 stmt.query_map(params![audition_id], |row| row.get::<_, i64>(0))?
                     .collect::<Result<Vec<_>>>()?

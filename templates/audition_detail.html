@@ -2,10 +2,10 @@
 {% block content %}
 <div class="page-head">
 <span class="overline">{{ t("nav.auditions") }}</span>
-<h1><span class="prep-pin pin-title" tabindex="0" aria-label="{{ t("prep.label", pct(Audition.Prep)) }}"><span class="prep-dot lv{{ Audition.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(Audition.Prep)) }}</span></span>{{ Audition.Name }}{% if Audition.Archived %} <span class="badge muted">{{ t("pieces.archived_badge") }}</span>{% elif Concluded %} <span class="badge done">{{ t("auditions.concluded_badge") }}</span>{% endif %}{% if Audition.Enrolled and not Audition.Archived %} <span class="badge">{{ t("auditions.enrolled_badge") }}</span>{% endif %}</h1>
+<h1><span class="prep-pin pin-title" tabindex="0" aria-label="{{ t("prep.label", pct(Audition.Prep)) }}"><span class="prep-dot lv{{ Audition.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(Audition.Prep)) }}</span></span>{{ Audition.Name }}{% if Past %} <span class="badge done">{{ t("auditions.past_badge") }}</span>{% endif %}{% if Audition.Enrolled and not Past %} <span class="badge">{{ t("auditions.enrolled_badge") }}</span>{% endif %}</h1>
 <p class="meta">{{ t("audition.date_label", dateIT(Audition.Date)) }} · {{ t("audition.priority_label", Audition.Weight) }} · {{ tp("pieces.linked", PieceCount) }} · {{ tp("resources.count", Links | length) }}</p>
 <div class="row btns">
-{% if not Audition.Archived %}{% if Audition.Enrolled %}<form method="post" action="/auditions/{{ Audition.ID }}/enrollment" class="inline"><button class="secondary" type="submit">{{ t("auditions.unenroll") }}</button></form>{% else %}<form method="post" action="/auditions/{{ Audition.ID }}/enrollment" class="inline"><button type="submit">{{ t("auditions.enroll") }}</button></form>{% endif %}{% endif %}
+{% if not Past %}{% if Audition.Enrolled %}<form method="post" action="/auditions/{{ Audition.ID }}/enrollment" class="inline"><button class="secondary" type="submit">{{ t("auditions.unenroll") }}</button></form>{% else %}<form method="post" action="/auditions/{{ Audition.ID }}/enrollment" class="inline"><button type="submit">{{ t("auditions.enroll") }}</button></form>{% endif %}{% endif %}
 </div>
 </div>
 

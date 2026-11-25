@@ -80,7 +80,7 @@ impl App {
         for t in &tiles {
             scores.insert(t.piece_id, t.prep);
         }
-        let pieces = self.list_pieces(0, "", false, "")?;
+        let pieces = self.list_pieces(0, "", "")?;
         let mut sums: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
         let mut counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
         for p in &pieces {
@@ -109,7 +109,7 @@ impl App {
             by_piece.insert(t.piece_id, t.level);
             scores.insert(t.piece_id, t.prep);
         }
-        let all = self.list_pieces(0, "", false, "")?;
+        let all = self.list_pieces(0, "", "")?;
         let mut sums: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
         let mut counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
         for p in &all {
@@ -172,7 +172,7 @@ impl App {
         selected: Option<&std::collections::HashSet<i64>>,
         lang: &str,
     ) -> Result<Vec<PrepTile>> {
-        let pieces = self.list_pieces(0, "", false, "")?;
+        let pieces = self.list_pieces(0, "", "")?;
         let today = chrono::NaiveDate::parse_from_str(today_str, "%Y-%m-%d").map_err(|e| {
             rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
         })?;

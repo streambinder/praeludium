@@ -518,7 +518,7 @@ async fn audition_detail_shows_seed_links() {
 }
 
 #[tokio::test]
-async fn piece_filters_and_archived_listing() {
+async fn piece_filters_listing() {
     let (r, app) = test_app();
     let aid = seed_audition(&app, "Cup", "2027-01-10", 4);
     let rid = seed_round(&app, aid, "Finale");
@@ -547,22 +547,6 @@ async fn piece_filters_and_archived_listing() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    // Archive state is seed data: archiving the piece in the
-    // database moves it to the archived listing.
-    {
-        let db = app.db.lock().unwrap();
-        db.execute(
-            "UPDATE pieces SET archived_at='2026-01-01T00:00:00Z' WHERE id=?",
-            rusqlite::params![pid],
-        )
-        .unwrap();
-    }
-    let resp = r
-        .clone()
-        .oneshot(req("GET", "/pieces?archiviati=1"))
-        .await
-        .unwrap();
-    assert!(body_string(resp).await.contains("Suite II"));
     let resp = r
         .clone()
         .oneshot(req("GET", "/pieces/xyz/edit"))
@@ -748,7 +732,7 @@ async fn auditions_list_and_diary_markers() {
     let (r, app) = test_app();
     // One concluded audition (past, not archived) and one upcoming
     // with a linked piece and a link row.
-    seed_open_audition(&app, "Past Cup", "2020-01-10", 2);
+    let past = seed_open_audition(&app, "Past Cup", "2020-01-10", 2);
     let next = seed_open_audition(&app, "Next Cup", "2027-01-10", 4);
     {
         let db = app.db.lock().unwrap();
@@ -764,6 +748,43 @@ async fn auditions_list_and_diary_markers() {
     assert_eq!(resp.status(), StatusCode::OK);
     let body = body_string(resp).await;
     assert!(body.contains("Past Cup") && body.contains("Next Cup"));
+    // The past audition shows the Past badge and no archived
+    // string anywhere on the page.
+    assert!(
+        body.contains("<span class=\"badge done\">past</span>"),
+        "past badge on the list: {body}"
+    );
+    assert!(
+        !body.to_lowercase().contains("archived"),
+        "no archived string on the list: {body}"
+    );
+    // The past detail page shows the badge and no enrollment
+    // toggle; the upcoming detail page keeps the toggle.
+    let resp = r
+        .clone()
+        .oneshot(req("GET", &format!("/auditions/{past}")))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert!(
+        body.contains("<span class=\"badge done\">past</span>"),
+        "past badge on the detail page: {body}"
+    );
+    assert!(
+        !body.contains("/enrollment"),
+        "no enrollment toggle on a past audition: {body}"
+    );
+    let resp = r
+        .clone()
+        .oneshot(req("GET", &format!("/auditions/{next}")))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(
+        body_string(resp).await.contains("/enrollment"),
+        "upcoming audition keeps the toggle"
+    );
     // Diary day with every marker kind on a fixed past date.
     let day = "2026-10-12";
     seed_session(&app, day, bach, 0, 0, "skipped");
@@ -1206,7 +1227,10 @@ async fn link_note_round_trip() {
     let aid = seed_audition(&app, "Roma", "2026-12-06", 4);
     let pid = seed_piece(&app, "Haydn", "Concerto", "solo", 3);
     link_full(&app, pid, aid, "ed. Schott", false);
-    assert_eq!(app.piece_auditions(pid).unwrap()[0].note, "ed. Schott");
+    assert_eq!(
+        app.piece_auditions(pid, &today()).unwrap()[0].note,
+        "ed. Schott"
+    );
     // The audition page and the piece page render the note as a note.
     let resp = r
         .clone()
@@ -1372,7 +1396,7 @@ async fn link_optional_round_trip() {
     // The piece links as an optional choice.
     let pid = seed_piece(&app, "Dvorak", "Concerto", "solo", 3);
     link_full(&app, pid, aid, "", true);
-    assert!(app.piece_auditions(pid).unwrap()[0].optional);
+    assert!(app.piece_auditions(pid, &today()).unwrap()[0].optional);
     // The audition page and the piece page render the badge.
     let resp = r
         .clone()
@@ -1395,7 +1419,7 @@ async fn link_optional_round_trip() {
     // A piece linked without the flag defaults to required.
     let haydn = seed_piece(&app, "Haydn", "Concerto", "solo", 3);
     link(&app, haydn, aid);
-    assert!(!app.piece_auditions(haydn).unwrap()[0].optional);
+    assert!(!app.piece_auditions(haydn, &today()).unwrap()[0].optional);
 }
 
 #[tokio::test]
@@ -1807,4 +1831,134 @@ async fn manual_log_list_shows_enrolled_pieces_only() {
         !form.contains(&format!("<option value=\"{haydn}\">")),
         "unenrolled piece hidden"
     );
+}
+
+#[tokio::test]
+async fn seed_has_no_archived_column() {
+    let (_r, app) = test_app();
+    {
+        let mut db = app.db.lock().unwrap();
+        praeludium::seed::apply_seed(&mut db, &praeludium::seed_data::SEED).unwrap();
+        for table in ["auditions", "pieces"] {
+            let n: i64 = db
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name='archived_at'"
+                    ),
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 0, "{table} has no archived_at column");
+        }
+        let pieces: i64 = db
+            .query_row("SELECT COUNT(*) FROM pieces", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(pieces, 42);
+        let links: i64 = db
+            .query_row("SELECT COUNT(*) FROM piece_audition", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(links, 82);
+        let diff = praeludium::seed::compare_seed(&db, &praeludium::seed_data::SEED).unwrap();
+        assert!(diff.auditions.missing.is_empty());
+        assert!(diff.auditions.different.is_empty());
+        assert!(diff.pieces.missing.is_empty());
+        assert!(diff.pieces.different.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn enrollment_toggle_round_trips_and_past_sorts_last() {
+    let (r, app) = test_app();
+    let past = seed_open_audition(&app, "Past Cup", "2020-01-10", 2);
+    let next = seed_open_audition(&app, "Next Cup", "2027-01-10", 4);
+    // The list orders upcoming first, then past, each by date.
+    let resp = r.clone().oneshot(req("GET", "/auditions")).await.unwrap();
+    let body = body_string(resp).await;
+    assert!(
+        body.find("Next Cup").unwrap() < body.find("Past Cup").unwrap(),
+        "upcoming sorts before past: {body}"
+    );
+    // The toggle round-trips on the upcoming audition.
+    let resp = r
+        .clone()
+        .oneshot(form_req(&format!("/auditions/{next}/enrollment"), ""))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let resp = r
+        .clone()
+        .oneshot(req("GET", &format!("/auditions/{next}")))
+        .await
+        .unwrap();
+    let body = body_string(resp).await;
+    assert!(
+        body.contains(">Unenroll</button>"),
+        "enrolled shows Unenroll: {body}"
+    );
+    let resp = r
+        .clone()
+        .oneshot(form_req(&format!("/auditions/{next}/enrollment"), ""))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let resp = r
+        .clone()
+        .oneshot(req("GET", &format!("/auditions/{next}")))
+        .await
+        .unwrap();
+    let body = body_string(resp).await;
+    assert!(
+        body.contains(">Enroll</button>"),
+        "unenrolled shows Enroll: {body}"
+    );
+    // The past detail page shows the badge and no toggle.
+    let resp = r
+        .clone()
+        .oneshot(req("GET", &format!("/auditions/{past}")))
+        .await
+        .unwrap();
+    let body = body_string(resp).await;
+    assert!(body.contains("<span class=\"badge done\">past</span>"));
+    assert!(!body.contains("/enrollment"));
+}
+
+#[tokio::test]
+async fn seeded_pieces_keep_links_and_plan_follows_enrollment() {
+    let (r, app) = test_app();
+    {
+        let mut db = app.db.lock().unwrap();
+        praeludium::seed::apply_seed(&mut db, &praeludium::seed_data::SEED).unwrap();
+    }
+    // Enroll in San Carlo (seed id 3) so its pieces reach the plan.
+    let resp = r
+        .clone()
+        .oneshot(form_req("/auditions/3/enrollment", ""))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    // The pieces list shows the four former archived pieces with
+    // their audition chips and no archived filter.
+    let resp = r.clone().oneshot(req("GET", "/pieces")).await.unwrap();
+    let body = body_string(resp).await;
+    for piece in [
+        "Concerto in Do maggiore",
+        "Schumann — Concerto",
+        "Elgar — Concerto",
+        "Mahler — Sinfonia n. 2",
+    ] {
+        assert!(body.contains(piece), "pieces list shows {piece}");
+    }
+    assert!(
+        !body.to_lowercase().contains("archived"),
+        "no archived filter on the pieces list"
+    );
+    // The plan holds the three San Carlo pieces but not Mahler 2,
+    // whose auditions are unenrolled.
+    let items = app.build_plan(&today()).unwrap();
+    let ids: Vec<i64> = items.iter().map(|it| it.piece.id).collect();
+    assert!(ids.contains(&27), "plan holds Haydn Do maggiore");
+    assert!(ids.contains(&29), "plan holds Schumann");
+    assert!(ids.contains(&30), "plan holds Elgar");
+    assert!(!ids.contains(&21), "plan holds no Mahler 2");
 }

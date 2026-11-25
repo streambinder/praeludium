@@ -3,17 +3,16 @@
 <div class="page-head">
 <span class="overline">{{ t("auditions.overline") }}</span>
 <h1>{{ t("nav.auditions") }}</h1>
-<p class="meta">{{ t("auditions.intro_a") }}<span class="badge done">{{ t("auditions.concluded_badge") }}</span>{{ t("auditions.intro_b") }}</p>
+<p class="meta">{{ t("auditions.intro_a") }}<span class="badge done">{{ t("auditions.past_badge") }}</span>{{ t("auditions.intro_b") }}</p>
 </div>
 
 <div class="stack">
 {% for r in Rows %}
-<article class="card reveal {% if r.Archived %}archived{% endif %}">
+<article class="card reveal {% if r.Past %}past{% endif %}">
 <span class="prep-pin pin-corner" tabindex="0" aria-label="{{ t("prep.label", pct(r.Prep)) }}"><span class="prep-dot lv{{ r.Level }}"></span><span class="pin-tip" aria-hidden="true">{{ t("prep.label", pct(r.Prep)) }}</span></span>
 <div class="card-head">
 <strong><a class="card-link" href="/auditions/{{ r.ID }}">{{ r.Name }}</a></strong>
-{% if r.Archived %}<span class="badge muted">{{ t("pieces.archived_badge") }}</span>
-{% elif r.Concluded %}<span class="badge done">{{ t("auditions.concluded_badge") }}</span>{% endif %}{% if r.Enrolled and not r.Archived %} <span class="badge">{{ t("auditions.enrolled_badge") }}</span>{% endif %}
+{% if r.Past %}<span class="badge done">{{ t("auditions.past_badge") }}</span>{% endif %}{% if r.Enrolled and not r.Past %} <span class="badge">{{ t("auditions.enrolled_badge") }}</span>{% endif %}
 </div>
 <div class="meta">{{ dateIT(r.Date) }}</div>
 <div class="meta">{{ tp("pieces.linked", r.Pieces) }}{% if r.Links %} · {{ tp("resources.count", r.Links) }}{% endif %}</div>

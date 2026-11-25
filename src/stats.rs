@@ -619,9 +619,9 @@ impl App {
 				WHERE mi.piece_id = p.id AND m.date >= ?) THEN p.id END)
 			FROM auditions au
 			JOIN piece_audition pa ON pa.audition_id = au.id
-			JOIN pieces p ON p.id = pa.piece_id AND p.archived_at IS NULL
+			JOIN pieces p ON p.id = pa.piece_id
 			LEFT JOIN sessions s ON s.piece_id = p.id AND s.minutes > 0 AND s.date >= ?
-			WHERE au.archived_at IS NULL AND au.audition_date >= ?
+			WHERE au.audition_date >= ?
 			GROUP BY au.id ORDER BY au.audition_date",
         )?;
         let rows = stmt
@@ -993,27 +993,22 @@ mod tests {
 
     fn seed_stats(app: &App) {
         let db = app.db.lock().unwrap();
-        for (id, name, offset, archived) in [
-            (101, "A1", 30, false),
-            (102, "A2", 40, false),
-            (103, "A3", 30, true),
-            (104, "A4", -30, false),
+        for (id, name, offset) in [
+            (101, "A1", 30),
+            (102, "A2", 40),
+            (103, "A3", 30),
+            (104, "A4", -30),
         ] {
             db.execute(
-                "INSERT INTO auditions (id, name, audition_date, archived_at) VALUES (?, ?, ?, ?)",
-                params![
-                    id,
-                    name,
-                    rel_day(offset),
-                    archived.then_some("2026-01-01T00:00:00Z")
-                ],
+                "INSERT INTO auditions (id, name, audition_date) VALUES (?, ?, ?)",
+                params![id, name, rel_day(offset)],
             )
             .unwrap();
         }
-        for (id, archived) in [(101, false), (102, false), (103, true), (104, false)] {
+        for id in [101, 102, 103, 104] {
             db.execute(
-                "INSERT INTO pieces (id, composer, work, archived_at) VALUES (?, 'C', 'W', ?)",
-                params![id, archived.then_some("2026-01-01T00:00:00Z")],
+                "INSERT INTO pieces (id, composer, work) VALUES (?, 'C', 'W')",
+                params![id],
             )
             .unwrap();
         }
@@ -1080,11 +1075,13 @@ mod tests {
             .iter()
             .filter(|r| ["A1", "A2", "A3", "A4"].contains(&r.name.as_str()))
             .collect();
-        assert_eq!(ours.len(), 2);
+        assert_eq!(ours.len(), 3);
         let a1 = ours.iter().find(|r| r.name == "A1").unwrap();
-        assert_eq!(a1.val, "2/2 · 100%");
+        assert_eq!(a1.val, "3/3 · 100%");
         let a2 = ours.iter().find(|r| r.name == "A2").unwrap();
         assert_eq!(a2.val, "1/2 · 50%");
+        let a3 = ours.iter().find(|r| r.name == "A3").unwrap();
+        assert_eq!(a3.val, "1/1 · 100%");
         let stats = app.diary_stats("en").unwrap();
         assert!(stats.has_dist);
         assert_eq!(stats.dist_pieces, 4);
@@ -1098,7 +1095,7 @@ mod tests {
             .iter()
             .filter(|r| ["A1", "A2", "A3", "A4"].contains(&r.name.as_str()))
             .collect();
-        assert_eq!(ours.len(), 2);
+        assert_eq!(ours.len(), 3);
     }
 
     #[test]
