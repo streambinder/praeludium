@@ -1854,11 +1854,26 @@ async fn seed_has_no_archived_column() {
         let pieces: i64 = db
             .query_row("SELECT COUNT(*) FROM pieces", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(pieces, 42);
+        assert_eq!(pieces, 46);
         let links: i64 = db
             .query_row("SELECT COUNT(*) FROM piece_audition", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(links, 82);
+        assert_eq!(links, 97);
+        // 35 link-segments, not 34: the seed never held the
+        // (18, 5, 18) row the spec assumed to remove, so the
+        // five Fenice rows add to the 30 already there.
+        let link_segments: i64 = db
+            .query_row("SELECT COUNT(*) FROM link_segments", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(link_segments, 35);
+        let segments: i64 = db
+            .query_row("SELECT COUNT(*) FROM segments", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(segments, 25);
+        let rounds: i64 = db
+            .query_row("SELECT COUNT(*) FROM audition_rounds", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rounds, 13);
         let diff = praeludium::seed::compare_seed(&db, &praeludium::seed_data::SEED).unwrap();
         assert!(diff.auditions.missing.is_empty());
         assert!(diff.auditions.different.is_empty());
@@ -1953,12 +1968,236 @@ async fn seeded_pieces_keep_links_and_plan_follows_enrollment() {
         !body.to_lowercase().contains("archived"),
         "no archived filter on the pieces list"
     );
-    // The plan holds the three San Carlo pieces but not Mahler 2,
-    // whose auditions are unenrolled.
+    // The plan holds one pool item for the San Carlo choice,
+    // with the pool-only members; the other two optionals keep
+    // single items, and Mahler 2 stays out, its auditions
+    // being unenrolled.
     let items = app.build_plan(&today()).unwrap();
+    let pools: Vec<_> = items.iter().filter(|it| !it.pool.is_empty()).collect();
+    assert_eq!(pools.len(), 1, "one pool item for the San Carlo choice");
+    let mut members: Vec<i64> = pools[0].pool.iter().map(|p| p.id).collect();
+    members.sort_unstable();
+    assert_eq!(members, vec![27, 29, 30], "pool members");
     let ids: Vec<i64> = items.iter().map(|it| it.piece.id).collect();
-    assert!(ids.contains(&27), "plan holds Haydn Do maggiore");
-    assert!(ids.contains(&29), "plan holds Schumann");
-    assert!(ids.contains(&30), "plan holds Elgar");
+    assert!(!ids.contains(&27), "no single item for a pool member");
+    assert!(!ids.contains(&29), "no single item for a pool member");
+    assert!(ids.contains(&25), "Haydn D major keeps a single item");
+    assert!(ids.contains(&28), "Dvorak keeps a single item");
     assert!(!ids.contains(&21), "plan holds no Mahler 2");
+}
+
+#[tokio::test]
+async fn catalog_audit_seed_matches_calls() {
+    let (r, app) = test_app();
+    {
+        let mut db = app.db.lock().unwrap();
+        praeludium::seed::apply_seed(&mut db, &praeludium::seed_data::SEED).unwrap();
+        // No San Carlo link carries a round; the five optionals
+        // are the candidate choices of Article 6.
+        let rounded: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM piece_audition WHERE audition_id=3 AND round_id IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(rounded, 0, "no San Carlo link carries a round");
+        let optionals: Vec<i64> = {
+            let mut stmt = db
+                .prepare(
+                    "SELECT piece_id FROM piece_audition WHERE audition_id=3 AND optional=1 ORDER BY piece_id",
+                )
+                .unwrap();
+            stmt.query_map([], |row| row.get(0))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect()
+        };
+        assert_eq!(optionals, vec![25, 27, 28, 29, 30], "San Carlo optionals");
+        // Fila: Brahms 3 is linked, Tosca is not.
+        let fila_tosca: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM piece_audition WHERE audition_id=5 AND piece_id=20",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(fila_tosca, 0, "Fila holds no Tosca link");
+        let fila_brahms: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM piece_audition WHERE audition_id=5 AND piece_id=7",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(fila_brahms, 1, "Fila holds Brahms 3");
+        // The Fila Otello link carries no segment; the Secondo
+        // link keeps its segment.
+        let fila_otello_segments: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM link_segments WHERE piece_id=18 AND audition_id=5",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(fila_otello_segments, 0, "Fila Otello link is whole");
+        let secondo_otello_segments: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM link_segments WHERE piece_id=18 AND audition_id=4",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            secondo_otello_segments, 1,
+            "Secondo Otello link keeps its segment"
+        );
+        // La Fenice: fifteen links, no Elgar.
+        let fenice: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM piece_audition WHERE audition_id=6",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(fenice, 15, "La Fenice holds fifteen links");
+        let fenice_elgar: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM piece_audition WHERE audition_id=6 AND piece_id=30",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(fenice_elgar, 0, "La Fenice holds no Elgar");
+    }
+    // The pages show the same: Brahms 3 on Fila, no Tosca; the
+    // new Fenice pieces, no Elgar.
+    let resp = r.clone().oneshot(req("GET", "/auditions/5")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert!(
+        body.contains("Brahms — Sinfonia n. 3"),
+        "Fila page shows Brahms 3"
+    );
+    assert!(!body.contains("Tosca"), "Fila page shows no Tosca");
+    let otello = body
+        .split_once("Verdi — Otello")
+        .expect("Otello card")
+        .1
+        .split_once("</article>")
+        .expect("Otello card end")
+        .0;
+    assert!(
+        !otello.contains("Excerpts:"),
+        "Fila Otello card has no segment"
+    );
+    let resp = r.clone().oneshot(req("GET", "/auditions/6")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    for piece in [
+        "Mozart — Sinfonia n. 40",
+        "Wagner — Tristano e Isotta",
+        "Haydn — Concerto in Re maggiore",
+    ] {
+        assert!(body.contains(piece), "Fenice page shows {piece}");
+    }
+    assert!(!body.contains("Elgar"), "Fenice page shows no Elgar");
+    // The Mahler combined piece keeps its row and its diary:
+    // five past sessions still list on its page.
+    for date in [
+        "2026-10-05",
+        "2026-10-06",
+        "2026-10-07",
+        "2026-10-08",
+        "2026-10-09",
+    ] {
+        seed_session(&app, date, 21, 20, 3, "");
+    }
+    let resp = r
+        .clone()
+        .oneshot(req("GET", "/diary/piece/21"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert!(
+        body.contains("Mahler — Sinfonia n. 2"),
+        "diary page for piece 21"
+    );
+    assert_eq!(
+        body.matches("<article class=\"card reveal\">").count(),
+        5,
+        "diary page lists five sessions"
+    );
+}
+
+#[tokio::test]
+async fn san_carlo_null_round_forms_one_pool() {
+    let (r, app) = test_app();
+    {
+        let mut db = app.db.lock().unwrap();
+        praeludium::seed::apply_seed(&mut db, &praeludium::seed_data::SEED).unwrap();
+    }
+    // Enroll in San Carlo so its pieces reach the plan.
+    let resp = r
+        .clone()
+        .oneshot(form_req("/auditions/3/enrollment", ""))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    // The plan holds one pool item for the choice, with the
+    // pool-only members; the other two optionals keep single items.
+    let items = app.build_plan(&today()).unwrap();
+    let pools: Vec<_> = items.iter().filter(|it| !it.pool.is_empty()).collect();
+    assert_eq!(pools.len(), 1, "one pool item for the San Carlo choice");
+    let mut members: Vec<i64> = pools[0].pool.iter().map(|p| p.id).collect();
+    members.sort_unstable();
+    assert_eq!(
+        members,
+        vec![27, 29, 30],
+        "pool members are the pool-only pieces"
+    );
+    let ids: Vec<i64> = items.iter().map(|it| it.piece.id).collect();
+    assert!(ids.contains(&25), "Haydn D major keeps a single item");
+    assert!(ids.contains(&28), "Dvorak keeps a single item");
+    // The detail page carries one composite card with all five
+    // optionals, ten single cards, and no round badge.
+    let resp = r.clone().oneshot(req("GET", "/auditions/3")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert_eq!(
+        body.matches("<article class=\"card reveal pool-card\">")
+            .count(),
+        1,
+        "one pool card"
+    );
+    assert_eq!(
+        body.matches("<div class=\"subcard\">").count(),
+        5,
+        "pool card has five subcards"
+    );
+    assert_eq!(
+        body.matches("<article class=\"card reveal\">").count(),
+        10,
+        "ten single cards"
+    );
+    assert!(
+        !body.contains("<span class=\"badge\">Eliminatoria</span>"),
+        "no Eliminatoria badge"
+    );
+    assert!(
+        !body.contains("<span class=\"badge\">Finale</span>"),
+        "no Finale badge"
+    );
+    assert_eq!(
+        body.matches("<span class=\"badge\">Optional</span>")
+            .count(),
+        5,
+        "five optional badges"
+    );
+    // The preparation map merges the five into one tile.
+    assert!(
+        body.contains("Dvořák — Concerto op. 104 &#x2f; Elgar — Concerto &#x2f; Haydn — Concerto in Do maggiore &#x2f; Haydn — Concerto in Re maggiore &#x2f; Schumann — Concerto"),
+        "pool tile lists every member"
+    );
 }

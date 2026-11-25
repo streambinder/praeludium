@@ -979,10 +979,10 @@ mod tests {
         assert_eq!(count(&db, "auditions"), 6);
         assert_eq!(count(&db, "audition_links"), 18);
         assert_eq!(count(&db, "audition_rounds"), 13);
-        assert_eq!(count(&db, "pieces"), 42);
-        assert_eq!(count(&db, "piece_audition"), 82);
+        assert_eq!(count(&db, "pieces"), 46);
+        assert_eq!(count(&db, "piece_audition"), 97);
         assert_eq!(count(&db, "segments"), 25);
-        assert_eq!(count(&db, "link_segments"), 30);
+        assert_eq!(count(&db, "link_segments"), 35);
         assert_eq!(count(&db, "users"), 0);
         assert_eq!(count(&db, "enrollments"), 0);
         let composer: String = db
@@ -1143,7 +1143,7 @@ mod tests {
             .query_row("SELECT name FROM auditions WHERE id=7", [], |r| r.get(0))
             .unwrap();
         assert_eq!(name, "Extra");
-        assert_eq!(count(&db, "pieces"), 42);
+        assert_eq!(count(&db, "pieces"), 46);
     }
 
     /// Every table, one row deleted and one row changed: the
