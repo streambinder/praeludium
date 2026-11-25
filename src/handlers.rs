@@ -491,19 +491,22 @@ impl App {
     /// are; every scoring input reads only the sessions that
     /// count toward the scope. An explicit skip marker names
     /// the whole piece and suppresses every scope. Auditions
-    /// listed in `exclude` as (audition, round) pairs are left
-    /// out: the plan covers them through their pool card.
+    /// listed in `exclude` as (audition, cluster) pairs are
+    /// left out: the plan covers them through their pool card.
     pub fn score_piece_scopes(
         &self,
         p: &Piece,
         today: &str,
         coeffs: Coeffs,
-        exclude: &[(i64, Option<i64>)],
+        exclude: &[(i64, String)],
     ) -> DbResult<Vec<PlanItem>> {
         let (upcoming, _, _) = upcoming_auditions(p, today)?;
         let upcoming: Vec<Audition> = upcoming
             .into_iter()
-            .filter(|c| !exclude.contains(&(c.id, c.round_id)))
+            .filter(|c| match &c.cluster {
+                Some(cluster) => !exclude.contains(&(c.id, cluster.clone())),
+                None => true,
+            })
             .collect();
         if upcoming.is_empty() {
             return Ok(Vec::new());
@@ -603,13 +606,13 @@ impl App {
     }
 
     /// The qualifying pools of the daily plan: optional links
-    /// that share one audition and one phase, with two or more
-    /// eligible members. A member is eligible when no other
-    /// audition requires it mandatorily and it carries no skip
-    /// marker for today. Members that fail either test keep
-    /// their normal single items.
+    /// that share one audition and one named choice, with two
+    /// or more eligible members. A member is eligible when no
+    /// other audition requires it mandatorily and it carries
+    /// no skip marker for today. Members that fail either test
+    /// keep their normal single items.
     pub fn plan_pools(&self, pieces: &[Piece], today: &str) -> DbResult<Vec<PoolPlan>> {
-        type PoolGroup = ((i64, Option<i64>), Audition, Vec<Piece>);
+        type PoolGroup = ((i64, String), Audition, Vec<Piece>);
         let mut groups: Vec<PoolGroup> = Vec::new();
         for p in pieces {
             let (upcoming, _, _) = upcoming_auditions(p, today)?;
@@ -617,7 +620,10 @@ impl App {
                 if !c.optional {
                     continue;
                 }
-                let key = (c.id, c.round_id);
+                let Some(cluster) = c.cluster.clone() else {
+                    continue;
+                };
+                let key = (c.id, cluster);
                 match groups.iter_mut().find(|(k, _, _)| *k == key) {
                     Some(g) => g.2.push(p.clone()),
                     None => groups.push((key, c.clone(), vec![p.clone()])),
@@ -753,15 +759,15 @@ impl App {
         let coeffs = self.get_coeffs()?;
         let pieces = self.list_pieces(0, "", "")?;
         let pools = self.plan_pools(&pieces, today)?;
-        let mut excluded: HashMap<i64, Vec<(i64, Option<i64>)>> = HashMap::new();
+        let mut excluded: HashMap<i64, Vec<(i64, String)>> = HashMap::new();
         for pool in &pools {
             for m in &pool.members {
-                excluded.entry(m.id).or_default().push(pool.key);
+                excluded.entry(m.id).or_default().push(pool.key.clone());
             }
         }
         let mut items = Vec::new();
         for p in &pieces {
-            let none: Vec<(i64, Option<i64>)> = Vec::new();
+            let none: Vec<(i64, String)> = Vec::new();
             let excl = excluded.get(&p.id).unwrap_or(&none);
             items.extend(self.score_piece_scopes(p, today, coeffs, excl)?);
         }
@@ -1354,7 +1360,7 @@ impl App {
 /// that asks the choice, and the pool-only members that form
 /// its single plan card.
 pub struct PoolPlan {
-    pub key: (i64, Option<i64>),
+    pub key: (i64, String),
     pub audition: Audition,
     pub members: Vec<Piece>,
 }
@@ -1961,35 +1967,37 @@ pub async fn handle_audition_detail(
         return err500(&e);
     }
     // Pool grouping for the piece list: optional links that
-    // share this audition and one phase collapse into one
-    // card, carried by the first member in list order. The
+    // share this audition and one named choice collapse into
+    // one card, carried by the first member in list order. The
     // count keeps the linked pieces, not the cards.
     let piece_count = pieces.len();
     let audition_id = c.id;
-    let mut pool_groups: HashMap<(i64, Option<i64>), Vec<Piece>> = HashMap::new();
+    let mut pool_groups: HashMap<(i64, String), Vec<Piece>> = HashMap::new();
     for p in &pieces {
         if let Some(link) = p
             .auditions
             .iter()
             .find(|link| link.id == audition_id && link.optional)
+            && let Some(cluster) = &link.cluster
         {
             pool_groups
-                .entry((audition_id, link.round_id))
+                .entry((audition_id, cluster.clone()))
                 .or_default()
                 .push(p.clone());
         }
     }
-    let mut emitted: HashSet<(i64, Option<i64>)> = HashSet::new();
+    let mut emitted: HashSet<(i64, String)> = HashSet::new();
     let mut grouped: Vec<Piece> = Vec::new();
     for mut p in pieces {
         if let Some(link) = p
             .auditions
             .iter()
             .find(|link| link.id == audition_id && link.optional)
+            && let Some(cluster) = &link.cluster
         {
-            let key = (audition_id, link.round_id);
+            let key = (audition_id, cluster.clone());
             if pool_groups.get(&key).map(|g| g.len()).unwrap_or(0) >= 2 {
-                if emitted.insert(key) {
+                if emitted.insert(key.clone()) {
                     p.pool = pool_groups[&key].clone();
                     grouped.push(p);
                 }
@@ -3968,7 +3976,7 @@ mod tests {
     fn link_optional(app: &App, piece: i64, audition: i64) {
         let db = app.db.lock().unwrap();
         db.execute(
-            "INSERT INTO piece_audition (piece_id, audition_id, optional) VALUES (?, ?, 1)",
+            "INSERT INTO piece_audition (piece_id, audition_id, optional, cluster) VALUES (?, ?, 1, 'concerto')",
             params![piece, audition],
         )
         .unwrap();

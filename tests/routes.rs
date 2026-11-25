@@ -83,6 +83,16 @@ fn link_full(app: &App, piece: i64, audition: i64, note: &str, optional: bool) {
     .unwrap();
 }
 
+/// Link a piece to an audition as one alternative of a named choice.
+fn link_choice(app: &App, piece: i64, audition: i64, cluster: &str) {
+    let db = app.db.lock().unwrap();
+    db.execute(
+        "INSERT INTO piece_audition(piece_id, audition_id, optional, cluster) VALUES(?,?,1,?)",
+        rusqlite::params![piece, audition, cluster],
+    )
+    .unwrap();
+}
+
 /// Insert a round directly. Returns the auto-assigned id.
 fn seed_round(app: &App, audition: i64, name: &str) -> i64 {
     let db = app.db.lock().unwrap();
@@ -1426,7 +1436,6 @@ async fn link_optional_round_trip() {
 async fn pool_card_on_audition_page_and_prepmap() {
     let (r, app) = test_app();
     let aid = seed_audition(&app, "San Carlo", "2027-01-10", 4);
-    let rid = seed_round(&app, aid, "Finale");
     let dvorak = seed_piece(&app, "Dvorak", "Concerto", "solo", 3);
     let schumann = seed_piece(&app, "Schumann", "Concerto", "solo", 3);
     let elgar = seed_piece(&app, "Elgar", "Concerto", "solo", 3);
@@ -1434,8 +1443,8 @@ async fn pool_card_on_audition_page_and_prepmap() {
     {
         let db = app.db.lock().unwrap();
         db.execute(
-            "INSERT INTO piece_audition (piece_id, audition_id, round_id, optional) VALUES (?, ?, ?, 1), (?, ?, ?, 1), (?, ?, ?, 1), (?, ?, ?, 0)",
-            rusqlite::params![dvorak, aid, rid, schumann, aid, rid, elgar, aid, rid, haydn, aid, rid],
+            "INSERT INTO piece_audition (piece_id, audition_id, cluster, optional) VALUES (?, ?, 'concerto', 1), (?, ?, 'concerto', 1), (?, ?, 'concerto', 1), (?, ?, NULL, 0)",
+            rusqlite::params![dvorak, aid, schumann, aid, elgar, aid, haydn, aid],
         )
         .unwrap();
     }
@@ -1526,8 +1535,8 @@ async fn pool_plan_card_shared_weight_and_member_choice() {
     let aid = seed_audition(&app, "San Carlo", "2027-01-10", 4);
     let dvorak = seed_piece(&app, "Dvorak", "Concerto", "solo", 3);
     let schumann = seed_piece(&app, "Schumann", "Concerto", "solo", 3);
-    link_full(&app, dvorak, aid, "", true);
-    link_full(&app, schumann, aid, "", true);
+    link_choice(&app, dvorak, aid, "concerto");
+    link_choice(&app, schumann, aid, "concerto");
     {
         let db = app.db.lock().unwrap();
         db.execute(
@@ -1599,9 +1608,9 @@ async fn pool_member_with_mandatory_link_planned_normally() {
     let cagliari = seed_audition(&app, "Cagliari", "2027-02-10", 3);
     let dvorak = seed_piece(&app, "Dvorak", "Concerto", "solo", 3);
     let schumann = seed_piece(&app, "Schumann", "Concerto", "solo", 3);
-    link_full(&app, dvorak, carlo, "", true);
+    link_choice(&app, dvorak, carlo, "concerto");
     link_full(&app, dvorak, cagliari, "", false);
-    link_full(&app, schumann, carlo, "", true);
+    link_choice(&app, schumann, carlo, "concerto");
     {
         let db = app.db.lock().unwrap();
         db.execute(
@@ -1968,19 +1977,19 @@ async fn seeded_pieces_keep_links_and_plan_follows_enrollment() {
         !body.to_lowercase().contains("archived"),
         "no archived filter on the pieces list"
     );
-    // The plan holds one pool item for the San Carlo choice,
-    // with the pool-only members; the other two optionals keep
-    // single items, and Mahler 2 stays out, its auditions
-    // being unenrolled.
+    // The plan holds one pool item for the concerto choice,
+    // with its pool-only members; the Haydn choice has one
+    // eligible member and forms no pool card, and Mahler 2
+    // stays out, its auditions being unenrolled.
     let items = app.build_plan(&today()).unwrap();
     let pools: Vec<_> = items.iter().filter(|it| !it.pool.is_empty()).collect();
-    assert_eq!(pools.len(), 1, "one pool item for the San Carlo choice");
+    assert_eq!(pools.len(), 1, "one pool item for the concerto choice");
     let mut members: Vec<i64> = pools[0].pool.iter().map(|p| p.id).collect();
     members.sort_unstable();
-    assert_eq!(members, vec![27, 29, 30], "pool members");
+    assert_eq!(members, vec![29, 30], "pool members");
     let ids: Vec<i64> = items.iter().map(|it| it.piece.id).collect();
-    assert!(!ids.contains(&27), "no single item for a pool member");
     assert!(!ids.contains(&29), "no single item for a pool member");
+    assert!(ids.contains(&27), "Haydn C major keeps a single item");
     assert!(ids.contains(&25), "Haydn D major keeps a single item");
     assert!(ids.contains(&28), "Dvorak keeps a single item");
     assert!(!ids.contains(&21), "plan holds no Mahler 2");
@@ -2132,7 +2141,7 @@ async fn catalog_audit_seed_matches_calls() {
 }
 
 #[tokio::test]
-async fn san_carlo_null_round_forms_one_pool() {
+async fn san_carlo_two_choice_clusters() {
     let (r, app) = test_app();
     {
         let mut db = app.db.lock().unwrap();
@@ -2145,36 +2154,39 @@ async fn san_carlo_null_round_forms_one_pool() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::SEE_OTHER);
-    // The plan holds one pool item for the choice, with the
-    // pool-only members; the other two optionals keep single items.
+    // The plan holds one pool item, for the concerto choice,
+    // with its pool-only members; the Haydn choice has one
+    // eligible member and forms no pool card.
     let items = app.build_plan(&today()).unwrap();
     let pools: Vec<_> = items.iter().filter(|it| !it.pool.is_empty()).collect();
-    assert_eq!(pools.len(), 1, "one pool item for the San Carlo choice");
+    assert_eq!(pools.len(), 1, "one pool item for the concerto choice");
     let mut members: Vec<i64> = pools[0].pool.iter().map(|p| p.id).collect();
     members.sort_unstable();
     assert_eq!(
         members,
-        vec![27, 29, 30],
+        vec![29, 30],
         "pool members are the pool-only pieces"
     );
     let ids: Vec<i64> = items.iter().map(|it| it.piece.id).collect();
     assert!(ids.contains(&25), "Haydn D major keeps a single item");
+    assert!(ids.contains(&27), "Haydn C major keeps a single item");
     assert!(ids.contains(&28), "Dvorak keeps a single item");
-    // The detail page carries one composite card with all five
-    // optionals, ten single cards, and no round badge.
+    // The detail page carries two composite cards, one per
+    // choice, five subcards in total, ten single cards, and
+    // no round badge.
     let resp = r.clone().oneshot(req("GET", "/auditions/3")).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let body = body_string(resp).await;
     assert_eq!(
         body.matches("<article class=\"card reveal pool-card\">")
             .count(),
-        1,
-        "one pool card"
+        2,
+        "two pool cards"
     );
     assert_eq!(
         body.matches("<div class=\"subcard\">").count(),
         5,
-        "pool card has five subcards"
+        "pool cards have five subcards in total"
     );
     assert_eq!(
         body.matches("<article class=\"card reveal\">").count(),
@@ -2195,9 +2207,51 @@ async fn san_carlo_null_round_forms_one_pool() {
         5,
         "five optional badges"
     );
-    // The preparation map merges the five into one tile.
+    // The preparation map merges each choice into its own tile.
     assert!(
-        body.contains("Dvořák — Concerto op. 104 &#x2f; Elgar — Concerto &#x2f; Haydn — Concerto in Do maggiore &#x2f; Haydn — Concerto in Re maggiore &#x2f; Schumann — Concerto"),
-        "pool tile lists every member"
+        body.contains("Haydn — Concerto in Do maggiore &#x2f; Haydn — Concerto in Re maggiore"),
+        "Haydn tile lists its two members"
     );
+    assert!(
+        body.contains(
+            "Dvořák — Concerto op. 104 &#x2f; Elgar — Concerto &#x2f; Schumann — Concerto"
+        ),
+        "concerto tile lists its three members"
+    );
+}
+
+#[tokio::test]
+async fn la_fenice_concerto_pool_and_piatti_single() {
+    let (r, app) = test_app();
+    {
+        let mut db = app.db.lock().unwrap();
+        praeludium::seed::apply_seed(&mut db, &praeludium::seed_data::SEED).unwrap();
+    }
+    // La Fenice shows one pool card with its two concerto choices.
+    let resp = r.clone().oneshot(req("GET", "/auditions/6")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert_eq!(
+        body.matches("<article class=\"card reveal pool-card\">")
+            .count(),
+        1,
+        "one pool card on La Fenice"
+    );
+    assert_eq!(
+        body.matches("<div class=\"subcard\">").count(),
+        2,
+        "pool card has two subcards"
+    );
+    // Santa Cecilia shows no pool card: Piatti is the only
+    // choice link, and a group of one forms no pool.
+    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert_eq!(
+        body.matches("<article class=\"card reveal pool-card\">")
+            .count(),
+        0,
+        "no pool card on Santa Cecilia"
+    );
+    assert!(body.contains("Optional"), "Piatti keeps its badge");
 }

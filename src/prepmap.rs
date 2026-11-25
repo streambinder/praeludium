@@ -245,16 +245,19 @@ impl App {
         }
         // A view filtered to exactly one audition merges the
         // pool tiles: optional links that share the audition
-        // and one phase become one tile, at the highest member
-        // level, sized by the hardest member. Wider views keep
-        // one tile per piece: a pool belongs to one audition.
+        // and one named choice become one tile, at the highest
+        // member level, sized by the hardest member. Wider
+        // views keep one tile per piece: a pool belongs to
+        // one audition.
         if let Some(aid) = scope_audition {
-            let mut groups: Vec<(Option<i64>, Vec<i64>)> = Vec::new();
+            let mut groups: Vec<(String, Vec<i64>)> = Vec::new();
             for p in &pieces {
-                if let Some(link) = p.auditions.iter().find(|c| c.id == aid && c.optional) {
-                    match groups.iter_mut().find(|(r, _)| *r == link.round_id) {
+                if let Some(link) = p.auditions.iter().find(|c| c.id == aid && c.optional)
+                    && let Some(cluster) = &link.cluster
+                {
+                    match groups.iter_mut().find(|(r, _)| r == cluster) {
                         Some(g) => g.1.push(p.id),
-                        None => groups.push((link.round_id, vec![p.id])),
+                        None => groups.push((cluster.clone(), vec![p.id])),
                     }
                 }
             }
@@ -657,7 +660,7 @@ mod tests {
             let p2 = db.last_insert_rowid();
             let p1 = p2 - 1;
             db.execute(
-                "INSERT INTO piece_audition (piece_id, audition_id, optional) VALUES (?, ?, 1), (?, ?, 1)",
+                "INSERT INTO piece_audition (piece_id, audition_id, optional, cluster) VALUES (?, ?, 1, 'concerto'), (?, ?, 1, 'concerto')",
                 rusqlite::params![p1, aid, p2, aid],
             )
             .unwrap();
