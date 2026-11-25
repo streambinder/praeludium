@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-24
 
-**Status**: Draft (pending ratification by the owner)
+**Status**: Complete (implemented in PR #69, deployed 2026-11-25)
 
 **Amended**: 2026-11-24 (the owner extends the scope
 to pieces: `archived_at` leaves the pieces too; the
