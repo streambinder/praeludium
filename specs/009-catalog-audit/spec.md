@@ -4,7 +4,17 @@
 
 **Created**: 2026-11-25
 
-**Status**: Draft (awaiting ratification)
+**Status**: Complete
+
+**Errata** (2026-11-25, found during
+implementation, verified on master): the seed
+never held the Tosca link (20, 5), already held
+Brahms 3 on Fila (7, 5, round 11), and never
+held the Fila Otello segment (18, 5, 18). The
+three Cagliari operations were no-ops. The
+final state matches this spec in every count
+except link-segments: 35, not 34. FR-7 and SC-1
+read 35.
 
 **Amended**: 2026-11-25 (the owner corrects
 the pool model: a competition with no stated
@@ -296,7 +306,7 @@ before.
 - FR-6: The link-segment (18, 5, 18) leaves
   the seed. The segment 18 stays on the
   link (18, 4).
-- FR-7: The seed holds 34 link-segments. The
+- FR-7: The seed holds 35 link-segments. The
   five added rows are (1, 6, 2), (17, 6, 26),
   (16, 6, 14), (24, 6, 20), and (25, 6, 22).
   No new segment is defined.
@@ -334,7 +344,7 @@ before.
 ## Success Criteria
 
 - SC-1: The seed counts read 46 pieces, 97
-  links, 25 segments, 34 link-segments, and
+  links, 25 segments, 35 link-segments, and
   13 rounds.
 - SC-2: The live San Carlo page shows no
   round badge on any link and five "A scelta"

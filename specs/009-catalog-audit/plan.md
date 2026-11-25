@@ -35,7 +35,7 @@
 --fail-under-lines 90` (`.github/workflows/push.yml`).
 - Counts before: 42 pieces, 82 links, 25 segments,
   30 link-segments, 13 rounds. Counts after: 46
-  pieces, 97 links, 25 segments, 34 link-segments,
+  pieces, 97 links, 25 segments, 35 link-segments,
   13 rounds.
 
 ## Phase A: Seed data
@@ -96,7 +96,7 @@ None`: (25, 6) with segment 22, (26, 6),
 
 - Extend the seed count test (or add one near
   it) to assert 46 pieces, 97 links, 25
-  segments, 34 link-segments, and 13 rounds.
+  segments, 35 link-segments, and 13 rounds.
 - Add an integration test that seeds a test
   database, applies the seed, and asserts: no
   San Carlo link carries a round; the five San
