@@ -4,7 +4,19 @@
 
 **Created**: 2026-11-26
 
-**Status**: Draft
+**Status**: Complete
+
+**Errata**: the implementation matched the spec. Two helpers exist
+instead of one: the grouping lives in `readiness_unit_groups`, wrapped
+by `readiness_units`, so the logic sits in one place. The
+implementation landed as one commit, not one per phase: the code and
+test phases touch the same files (Rust unit tests are colocated), so
+two commits would break the rule that each file appears in exactly one
+commit. `ReadinessRow.pieces` still counts linked pieces, as the
+detail page does; only the mean uses units. A pool tile now sorts by
+its best member preparation instead of its worst, a visible
+consequence of FR-8. One pre-existing test needed a fix: it passed
+unlinked pieces, which no longer rank.
 
 **Input**: User description: the owner sees Santa Cecilia fall from 50 percent to 43 percent on the day cycle 011 splits the Piatti choice into 4 pieces, and states the rule in his words: "i cluster come pezzo singolo di cui prendere quello al massimo della preparazione, per il resto tutti i pezzi singoli, ignorando round e simili".
 
