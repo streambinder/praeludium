@@ -161,10 +161,12 @@ impl App {
         Ok(scope)
     }
 
-    /// How many of the audition pieces saw study time or a mock in
+    /// How many of the audition units saw study time or a mock in
     /// the window that starts at since. Study time counts through
     /// the scope of each link: a session on a segment the link
     /// does not ask for does not touch the piece for this audition.
+    /// A choice cluster counts as touched when any member is
+    /// touched, and counts once in the total.
     pub fn readiness_coverage(&self, c: &Audition, since: &str) -> Result<StatRow> {
         let pieces = self.list_pieces(c.id, "", "")?;
         if pieces.is_empty() {
@@ -183,10 +185,10 @@ impl App {
                 .collect::<Result<Vec<i64>>>()?;
             rows.into_iter().collect()
         };
-        let mut touched: i64 = 0;
+        let mut touched_pieces: std::collections::HashSet<i64> = std::collections::HashSet::new();
         for p in &pieces {
             if mock_pieces.contains(&p.id) {
-                touched += 1;
+                touched_pieces.insert(p.id);
                 continue;
             }
             let scope = self.link_segment_ids(p.id, c.id)?;
@@ -200,10 +202,15 @@ impl App {
                     .collect::<Result<Vec<Option<i64>>>>()?
             };
             if segs.iter().any(|s| crate::segments::counts(*s, &scope)) {
-                touched += 1;
+                touched_pieces.insert(p.id);
             }
         }
-        let total = pieces.len() as i64;
+        let groups = crate::prepmap::readiness_unit_groups(&pieces, c.id);
+        let total = groups.len() as i64;
+        let touched = groups
+            .iter()
+            .filter(|g| g.iter().any(|p| touched_pieces.contains(&p.id)))
+            .count() as i64;
         let pct = touched * 100 / total;
         Ok(StatRow {
             name: c.name.clone(),
@@ -285,27 +292,36 @@ impl App {
         Ok((all, week))
     }
 
-    /// Rank the pieces of one audition by the preparation their
-    /// link scope earns, and return the five weakest as the
-    /// attack list.
+    /// Rank the readiness units of one audition by the preparation
+    /// their link scope earns, and return the five weakest as the
+    /// attack list. A choice cluster ranks once, as the row of
+    /// its best member.
     pub fn readiness_weakest(&self, audition_id: i64, pieces: &[Piece]) -> Result<Vec<WeakRow>> {
         let today = chrono::NaiveDate::parse_from_str(&crate::db::today_str(), "%Y-%m-%d")
             .unwrap_or_else(|_| chrono::NaiveDate::from_ymd_opt(1970, 1, 1).unwrap());
-        let mut rows: Vec<(f64, WeakRow)> = Vec::new();
+        let mut scores: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
         for p in pieces {
             let scope = self.link_segment_ids(p.id, audition_id)?;
             let mut sessions = self.prep_sessions(p.id)?;
             if !scope.is_empty() {
                 sessions.retain(|s| crate::segments::counts(s.segment_id, &scope));
             }
-            let (score, level, _, _) = crate::prepmap::prep_score(p.difficulty, &sessions, today);
+            let (score, _, _, _) = crate::prepmap::prep_score(p.difficulty, &sessions, today);
+            scores.insert(p.id, score);
+        }
+        let units = crate::prepmap::readiness_units(pieces, audition_id, &scores);
+        let mut rows: Vec<(f64, WeakRow)> = Vec::new();
+        for u in &units {
+            let Some(p) = pieces.iter().find(|p| p.id == u.piece_id) else {
+                continue;
+            };
             rows.push((
-                score,
+                u.prep,
                 WeakRow {
-                    piece_id: p.id,
+                    piece_id: u.piece_id,
                     title: format!("{} — {}", p.composer, p.work),
-                    prep: (score * 100.0 + 0.5) as i64,
-                    level,
+                    prep: (u.prep * 100.0 + 0.5) as i64,
+                    level: crate::prepmap::prep_level_from_score(u.prep),
                 },
             ));
         }
@@ -507,18 +523,109 @@ mod tests {
                 id: 1,
                 composer: "C1".into(),
                 work: "W1".into(),
+                auditions: vec![Audition {
+                    id: 1,
+                    ..Default::default()
+                }],
                 ..Default::default()
             },
             Piece {
                 id: 2,
                 composer: "C2".into(),
                 work: "W2".into(),
+                auditions: vec![Audition {
+                    id: 1,
+                    ..Default::default()
+                }],
                 ..Default::default()
             },
         ];
         let rows = app.readiness_weakest(1, &pieces).unwrap();
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].title, "C1 — W1");
+    }
+
+    /// One audition with a three-piece choice and two singles,
+    /// no sessions. Returns the audition id and the five piece
+    /// ids in list order: best, middle, untouched, high, low.
+    fn seed_clustered(app: &App) -> (i64, [i64; 5]) {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO auditions (name, audition_date) VALUES ('A', '2027-01-08')",
+            [],
+        )
+        .unwrap();
+        let aid = db.last_insert_rowid();
+        crate::db::ensure_test_user(&db).unwrap();
+        db.execute(
+            "INSERT INTO enrollments (user_id, audition_id) VALUES (1, ?)",
+            params![aid],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO pieces (composer, work, difficulty) VALUES ('Choice', 'Best', 1), ('Choice', 'Mid', 1), ('Choice', 'None', 1), ('Solo', 'High', 1), ('Solo', 'Low', 1)",
+            [],
+        )
+        .unwrap();
+        let p5 = db.last_insert_rowid();
+        let ids = [p5 - 4, p5 - 3, p5 - 2, p5 - 1, p5];
+        db.execute(
+            "INSERT INTO piece_audition (piece_id, audition_id, optional, cluster) VALUES (?, ?, 1, 'concerto'), (?, ?, 1, 'concerto'), (?, ?, 1, 'concerto'), (?, ?, 0, NULL), (?, ?, 0, NULL)",
+            params![ids[0], aid, ids[1], aid, ids[2], aid, ids[3], aid, ids[4], aid],
+        )
+        .unwrap();
+        (aid, ids)
+    }
+
+    fn seed_session(app: &App, date: &str, piece: i64, minutes: i64, conf: i64) {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO sessions (date, piece_id, minutes, confidence, note) VALUES (?, ?, ?, ?, '')",
+            params![date, piece, minutes, conf],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn coverage_counts_a_cluster_once_through_any_member() {
+        let app = test_app();
+        let (aid, ids) = seed_clustered(&app);
+        // The best member stays untouched; the middle member is
+        // the only touched member of the cluster. Both singles
+        // are touched.
+        seed_session(&app, "2026-10-10", ids[0], 0, 5);
+        seed_session(&app, "2026-10-10", ids[1], 30, 0);
+        seed_session(&app, "2026-10-10", ids[3], 30, 0);
+        seed_session(&app, "2026-10-10", ids[4], 30, 0);
+        let aud = Audition {
+            id: aid,
+            name: "A".into(),
+            ..Default::default()
+        };
+        let row = app.readiness_coverage(&aud, "2026-01-01").unwrap();
+        assert_eq!(row.val, "3/3 · 100%");
+    }
+
+    #[test]
+    fn weakest_shows_a_cluster_once_as_its_best_member() {
+        let app = test_app();
+        let (aid, ids) = seed_clustered(&app);
+        // Zero-minute ratings carry confidence only, and they
+        // read the same on any day: 0.6, 0.3, none, 0.45, 0.15.
+        seed_session(&app, "2026-10-10", ids[0], 0, 5);
+        seed_session(&app, "2026-10-10", ids[1], 0, 3);
+        seed_session(&app, "2026-10-10", ids[3], 0, 4);
+        seed_session(&app, "2026-10-10", ids[4], 0, 2);
+        let pieces = app.list_pieces(aid, "", "").unwrap();
+        let rows = app.readiness_weakest(aid, &pieces).unwrap();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].piece_id, ids[4]);
+        assert_eq!(rows[0].prep, 15);
+        assert_eq!(rows[1].piece_id, ids[3]);
+        assert_eq!(rows[1].prep, 45);
+        assert_eq!(rows[2].piece_id, ids[0]);
+        assert_eq!(rows[2].prep, 60);
+        assert_eq!(rows[2].title, "Choice — Best");
     }
 }
 

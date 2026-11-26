@@ -2305,3 +2305,92 @@ async fn la_fenice_concerto_pool() {
         "pool card has two subcards"
     );
 }
+
+/// One audition with a three-piece choice and two singles.
+/// Returns the audition id and the five piece ids in list
+/// order: best, middle, untouched, high, low.
+fn seed_cluster_readiness(app: &App, name: &str) -> (i64, [i64; 5]) {
+    let aid = seed_audition(app, name, "2027-01-08", 3);
+    let best = seed_piece(app, "Choice", "Best", "solo", 1);
+    let mid = seed_piece(app, "Choice", "Mid", "solo", 1);
+    let none = seed_piece(app, "Choice", "None", "solo", 1);
+    let high = seed_piece(app, "Solo", "High", "solo", 1);
+    let low = seed_piece(app, "Solo", "Low", "solo", 1);
+    link_choice(app, best, aid, "concerto");
+    link_choice(app, mid, aid, "concerto");
+    link_choice(app, none, aid, "concerto");
+    link(app, high, aid);
+    link(app, low, aid);
+    (aid, [best, mid, none, high, low])
+}
+
+#[tokio::test]
+async fn cluster_readiness_counts_once_at_best_member() {
+    let (r, app) = test_app();
+    let (aid, ids) = seed_cluster_readiness(&app, "Choice Test");
+    let day = today();
+    // Zero-minute ratings carry confidence only: 0.6, 0.3.
+    seed_session(&app, &day, ids[0], 0, 5, "");
+    seed_session(&app, &day, ids[1], 0, 3, "");
+    // 36 minutes at confidence 5 is 0.8; 12 minutes at
+    // confidence 3 is 0.4. Both sit today, so neither decays.
+    seed_session(&app, &day, ids[3], 36, 5, "");
+    seed_session(&app, &day, ids[4], 12, 3, "");
+    // The auditions list pin reads the unit mean:
+    // (0.6 + 0.8 + 0.4) / 3 = 0.6.
+    let resp = r.clone().oneshot(req("GET", "/auditions")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    let at = body.find("Choice Test").expect("custom audition lists");
+    assert!(
+        body[..at].contains("Confidence 60%"),
+        "pin shows the unit mean"
+    );
+    // The readiness page counts three units: the cluster is
+    // untouched, both singles are touched.
+    let resp = r
+        .clone()
+        .oneshot(req("GET", &format!("/auditions/{aid}/readiness")))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert!(body.contains("2&#x2f;3 · 66%"), "coverage counts units");
+    assert!(
+        body.contains("Choice — Best"),
+        "weakest shows the best member"
+    );
+    assert!(
+        !body.contains("Choice — Mid"),
+        "weakest hides the other members"
+    );
+    assert!(
+        !body.contains("Choice — None"),
+        "weakest hides the other members"
+    );
+}
+
+#[tokio::test]
+async fn cluster_coverage_counts_a_touch_through_any_member() {
+    let (r, app) = test_app();
+    let (aid, ids) = seed_cluster_readiness(&app, "Choice Touch");
+    let day = today();
+    // The best member stays untouched; the middle member is
+    // the only touched member of the cluster. Both singles
+    // are touched.
+    seed_session(&app, &day, ids[0], 0, 5, "");
+    seed_session(&app, &day, ids[1], 30, 0, "");
+    seed_session(&app, &day, ids[3], 30, 0, "");
+    seed_session(&app, &day, ids[4], 30, 0, "");
+    let resp = r
+        .clone()
+        .oneshot(req("GET", &format!("/auditions/{aid}/readiness")))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert!(
+        body.contains("3&#x2f;3 · 100%"),
+        "cluster counts as touched"
+    );
+}
