@@ -4,7 +4,9 @@
 
 **Created**: 2026-11-26
 
-**Status**: Draft
+**Status**: Complete
+
+**Errata**: none. The implementation matched the spec. One test was split, not named in the plan: `la_fenice_concerto_pool_and_piatti_single` became `santa_cecilia_piatti_cluster` and `la_fenice_concerto_pool`, because its Santa Cecilia half no longer holds.
 
 **Input**: User description: the owner asks for one distinct piece per Capriccio, clustered as a choice on Santa Cecilia, and for the whole diary of Agnese to move onto Capriccio n. 6. The owner answers the open count question of 2026-11-26 10:07 with "fai come da bando".
 
