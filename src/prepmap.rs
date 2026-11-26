@@ -64,9 +64,96 @@ pub struct PrepSession {
 pub const PREP_BIAS_DESKTOP: f64 = 1.6;
 pub const PREP_BIAS_MOBILE: f64 = 0.7;
 
+/// One readiness unit of an audition: a choice cluster collapsed
+/// to its best member, or a single piece on its own.
+#[derive(Debug, Clone)]
+pub struct ReadinessUnit {
+    /// The piece that stands for the unit: its best member, or the
+    /// piece itself when the unit is a single.
+    pub piece_id: i64,
+    /// The preparation of the unit: the maximum member preparation.
+    pub prep: f64,
+    /// The members of the unit, in list order.
+    pub members: Vec<i64>,
+}
+
+/// Group the pieces of one audition by choice cluster: optional
+/// links that share one cluster name form one group, every other
+/// piece forms a group of its own. Rounds play no part.
+pub fn readiness_unit_groups(
+    pieces: &[crate::db::Piece],
+    audition_id: i64,
+) -> Vec<Vec<&crate::db::Piece>> {
+    let mut groups: Vec<(Option<String>, Vec<&crate::db::Piece>)> = Vec::new();
+    for p in pieces {
+        let Some(link) = p.auditions.iter().find(|c| c.id == audition_id) else {
+            continue;
+        };
+        let key = if link.optional {
+            link.cluster.clone()
+        } else {
+            None
+        };
+        if let Some(cluster) = &key
+            && let Some((_, members)) = groups
+                .iter_mut()
+                .find(|(k, _)| k.as_deref() == Some(cluster.as_str()))
+        {
+            members.push(p);
+            continue;
+        }
+        groups.push((key, vec![p]));
+    }
+    groups.into_iter().map(|(_, members)| members).collect()
+}
+
+/// Collapse the pieces of one audition into readiness units: one
+/// unit per choice cluster at the maximum member preparation, one
+/// unit per other piece at its own preparation. Rounds play no
+/// part. A cluster with one member is that piece. A tie goes to
+/// the first member in list order.
+pub fn readiness_units(
+    pieces: &[crate::db::Piece],
+    audition_id: i64,
+    prep: &std::collections::HashMap<i64, f64>,
+) -> Vec<ReadinessUnit> {
+    readiness_unit_groups(pieces, audition_id)
+        .into_iter()
+        .map(|members| {
+            let mut best_id = members[0].id;
+            let mut best_prep = prep.get(&members[0].id).copied().unwrap_or(0.0);
+            for m in &members[1..] {
+                let score = prep.get(&m.id).copied().unwrap_or(0.0);
+                if score > best_prep {
+                    best_id = m.id;
+                    best_prep = score;
+                }
+            }
+            ReadinessUnit {
+                piece_id: best_id,
+                prep: best_prep,
+                members: members.iter().map(|m| m.id).collect(),
+            }
+        })
+        .collect()
+}
+
+/// The auditions linked to any of the pieces, in first-seen order.
+fn linked_audition_ids(pieces: &[crate::db::Piece]) -> Vec<i64> {
+    let mut ids: Vec<i64> = Vec::new();
+    for p in pieces {
+        for c in &p.auditions {
+            if !ids.contains(&c.id) {
+                ids.push(c.id);
+            }
+        }
+    }
+    ids
+}
+
 impl App {
-    /// The mean preparation of every audition over all its active
-    /// pieces, as a 0..4 level map and a 0..1 score map.
+    /// The mean preparation of every audition over its readiness
+    /// units: each choice cluster counts once, at its best member.
     pub fn audition_prep_stats(
         &self,
     ) -> Result<(
@@ -81,18 +168,14 @@ impl App {
             scores.insert(t.piece_id, t.prep);
         }
         let pieces = self.list_pieces(0, "", "")?;
-        let mut sums: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
-        let mut counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
-        for p in &pieces {
-            for c in &p.auditions {
-                *sums.entry(c.id).or_default() += scores.get(&p.id).copied().unwrap_or(0.0);
-                *counts.entry(c.id).or_default() += 1;
-            }
-        }
         let mut levels = std::collections::HashMap::new();
         let mut means = std::collections::HashMap::new();
-        for (id, sum) in sums {
-            let mean = sum / counts[&id] as f64;
+        for id in linked_audition_ids(&pieces) {
+            let units = readiness_units(&pieces, id, &scores);
+            if units.is_empty() {
+                continue;
+            }
+            let mean = units.iter().map(|u| u.prep).sum::<f64>() / units.len() as f64;
             means.insert(id, mean);
             levels.insert(id, prep_level_from_score(mean));
         }
@@ -110,18 +193,14 @@ impl App {
             scores.insert(t.piece_id, t.prep);
         }
         let all = self.list_pieces(0, "", "")?;
-        let mut sums: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
-        let mut counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
-        for p in &all {
-            for c in &p.auditions {
-                *sums.entry(c.id).or_default() += scores.get(&p.id).copied().unwrap_or(0.0);
-                *counts.entry(c.id).or_default() += 1;
-            }
-        }
         let mut levels = std::collections::HashMap::new();
         let mut means = std::collections::HashMap::new();
-        for (id, sum) in sums {
-            let mean = sum / counts[&id] as f64;
+        for id in linked_audition_ids(&all) {
+            let units = readiness_units(&all, id, &scores);
+            if units.is_empty() {
+                continue;
+            }
+            let mean = units.iter().map(|u| u.prep).sum::<f64>() / units.len() as f64;
             means.insert(id, mean);
             levels.insert(id, prep_level_from_score(mean));
         }
@@ -246,9 +325,9 @@ impl App {
         // A view filtered to exactly one audition merges the
         // pool tiles: optional links that share the audition
         // and one named choice become one tile, at the highest
-        // member level, sized by the hardest member. Wider
-        // views keep one tile per piece: a pool belongs to
-        // one audition.
+        // member level and preparation, sized by the hardest
+        // member. Wider views keep one tile per piece: a pool
+        // belongs to one audition.
         if let Some(aid) = scope_audition {
             let mut groups: Vec<(String, Vec<i64>)> = Vec::new();
             for p in &pieces {
@@ -296,7 +375,10 @@ impl App {
                 } else {
                     0.0
                 };
-                let prep = members.iter().map(|m| m.prep).fold(f64::INFINITY, f64::min);
+                let prep = members
+                    .iter()
+                    .map(|m| m.prep)
+                    .fold(f64::NEG_INFINITY, f64::max);
                 let mut title = format!(
                     "{}\n{} · {} · {}",
                     label,
@@ -638,39 +720,7 @@ mod tests {
     #[test]
     fn pool_tile_with_rated_member_shows_confidence() {
         let app = test_app();
-        let (aid, p1, p2) = {
-            let db = app.db.lock().unwrap();
-            db.execute(
-                "INSERT INTO auditions (name, audition_date, weight) VALUES ('Pool', '2026-11-10', 4)",
-                [],
-            )
-            .unwrap();
-            let aid = db.last_insert_rowid();
-            crate::db::ensure_test_user(&db).unwrap();
-            db.execute(
-                "INSERT INTO enrollments (user_id, audition_id) VALUES (?, ?)",
-                rusqlite::params![crate::db::SEEDED_USER_ID, aid],
-            )
-            .unwrap();
-            db.execute(
-                "INSERT INTO pieces (composer, work, difficulty) VALUES ('Comp', 'One', 3), ('Comp', 'Two', 3)",
-                [],
-            )
-            .unwrap();
-            let p2 = db.last_insert_rowid();
-            let p1 = p2 - 1;
-            db.execute(
-                "INSERT INTO piece_audition (piece_id, audition_id, optional, cluster) VALUES (?, ?, 1, 'concerto'), (?, ?, 1, 'concerto')",
-                rusqlite::params![p1, aid, p2, aid],
-            )
-            .unwrap();
-            db.execute(
-                "INSERT INTO sessions (date, piece_id, minutes, confidence, note) VALUES ('2026-10-13', ?, 30, 4, '')",
-                rusqlite::params![p1],
-            )
-            .unwrap();
-            (aid, p1, p2)
-        };
+        let (aid, p1, p2) = seed_pool(&app);
         let _ = p2;
         // The pool merges only in a view scoped to exactly one
         // audition: wider views keep one tile per piece.
@@ -685,5 +735,152 @@ mod tests {
         assert!(merged.label.contains(" / "));
         assert!(merged.piece_id == p1 || merged.piece_id == p2);
         assert_eq!(merged.title.matches('·').count(), 3);
+    }
+
+    /// Two pieces in one choice, one practiced: the pool tile
+    /// carries the rated member, with its preparation.
+    fn seed_pool(app: &App) -> (i64, i64, i64) {
+        let db = app.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO auditions (name, audition_date, weight) VALUES ('Pool', '2026-11-10', 4)",
+            [],
+        )
+        .unwrap();
+        let aid = db.last_insert_rowid();
+        crate::db::ensure_test_user(&db).unwrap();
+        db.execute(
+            "INSERT INTO enrollments (user_id, audition_id) VALUES (?, ?)",
+            rusqlite::params![crate::db::SEEDED_USER_ID, aid],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO pieces (composer, work, difficulty) VALUES ('Comp', 'One', 3), ('Comp', 'Two', 3)",
+            [],
+        )
+        .unwrap();
+        let p2 = db.last_insert_rowid();
+        let p1 = p2 - 1;
+        db.execute(
+            "INSERT INTO piece_audition (piece_id, audition_id, optional, cluster) VALUES (?, ?, 1, 'concerto'), (?, ?, 1, 'concerto')",
+            rusqlite::params![p1, aid, p2, aid],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO sessions (date, piece_id, minutes, confidence, note) VALUES ('2026-10-13', ?, 30, 4, '')",
+            rusqlite::params![p1],
+        )
+        .unwrap();
+        (aid, p1, p2)
+    }
+
+    #[test]
+    fn pool_tile_shows_best_member_preparation() {
+        let app = test_app();
+        let (aid, p1, _) = seed_pool(&app);
+        let wide = app
+            .prep_tiles("2026-10-14", PREP_BIAS_DESKTOP, "en")
+            .unwrap();
+        let single = wide
+            .iter()
+            .find(|t| t.piece_id == p1)
+            .expect("best member tile");
+        let selected: std::collections::HashSet<i64> = [aid].into_iter().collect();
+        let tiles = app
+            .prep_tiles_for("2026-10-14", PREP_BIAS_DESKTOP, Some(&selected), "en")
+            .unwrap();
+        let merged = tiles
+            .iter()
+            .find(|t| t.optional && t.rated)
+            .expect("merged rated pool tile");
+        assert!(merged.prep > 0.0);
+        assert!((merged.prep - single.prep).abs() < 1e-9);
+    }
+
+    /// One hand-built piece with a link to one audition.
+    fn unit_piece(
+        id: i64,
+        audition_id: i64,
+        optional: bool,
+        cluster: Option<&str>,
+        round: Option<i64>,
+    ) -> crate::db::Piece {
+        crate::db::Piece {
+            id,
+            auditions: vec![crate::db::Audition {
+                id: audition_id,
+                optional,
+                cluster: cluster.map(str::to_string),
+                round_id: round,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    fn unit_prep(pairs: &[(i64, f64)]) -> std::collections::HashMap<i64, f64> {
+        pairs.iter().map(|(id, prep)| (*id, *prep)).collect()
+    }
+
+    #[test]
+    fn readiness_units_collapse_a_cluster_to_its_best_member() {
+        let pieces = vec![
+            unit_piece(1, 1, true, Some("concerto"), None),
+            unit_piece(2, 1, true, Some("concerto"), None),
+            unit_piece(3, 1, true, Some("concerto"), None),
+            unit_piece(4, 1, false, None, None),
+            unit_piece(5, 1, false, None, None),
+        ];
+        let prep = unit_prep(&[(1, 0.6), (2, 0.3), (3, 0.0), (4, 0.8), (5, 0.4)]);
+        let units = readiness_units(&pieces, 1, &prep);
+        assert_eq!(units.len(), 3);
+        let cluster = &units[0];
+        assert_eq!(cluster.piece_id, 1);
+        assert!((cluster.prep - 0.6).abs() < 1e-9);
+        assert_eq!(cluster.members, vec![1, 2, 3]);
+        let mean = units.iter().map(|u| u.prep).sum::<f64>() / units.len() as f64;
+        assert!((mean - 0.6).abs() < 1e-9);
+    }
+
+    #[test]
+    fn readiness_units_single_member_cluster_is_the_piece() {
+        let pieces = vec![unit_piece(1, 1, true, Some("concerto"), None)];
+        let prep = unit_prep(&[(1, 0.4)]);
+        let units = readiness_units(&pieces, 1, &prep);
+        assert_eq!(units.len(), 1);
+        assert_eq!(units[0].piece_id, 1);
+        assert!((units[0].prep - 0.4).abs() < 1e-9);
+        assert_eq!(units[0].members, vec![1]);
+    }
+
+    #[test]
+    fn readiness_units_tie_goes_to_the_first_member() {
+        let pieces = vec![
+            unit_piece(1, 1, true, Some("concerto"), None),
+            unit_piece(2, 1, true, Some("concerto"), None),
+        ];
+        let prep = unit_prep(&[(1, 0.5), (2, 0.5)]);
+        let units = readiness_units(&pieces, 1, &prep);
+        assert_eq!(units.len(), 1);
+        assert_eq!(units[0].piece_id, 1);
+        assert!((units[0].prep - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn readiness_units_ignore_rounds_and_other_auditions() {
+        let pieces = vec![
+            unit_piece(1, 1, true, Some("concerto"), Some(1)),
+            unit_piece(2, 1, true, Some("concerto"), Some(2)),
+            unit_piece(3, 1, true, Some("concerto"), None),
+            unit_piece(4, 1, false, Some("concerto"), None),
+            unit_piece(5, 2, true, Some("concerto"), None),
+        ];
+        let prep = unit_prep(&[(1, 0.2), (2, 0.7), (3, 0.0), (4, 0.9), (5, 1.0)]);
+        let units = readiness_units(&pieces, 1, &prep);
+        assert_eq!(units.len(), 2);
+        assert_eq!(units[0].piece_id, 2);
+        assert!((units[0].prep - 0.7).abs() < 1e-9);
+        assert_eq!(units[0].members, vec![1, 2, 3]);
+        assert_eq!(units[1].piece_id, 4);
+        assert!((units[1].prep - 0.9).abs() < 1e-9);
     }
 }

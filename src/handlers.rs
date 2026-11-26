@@ -778,8 +778,9 @@ impl App {
         Ok(items)
     }
 
-    /// Average the preparation score of the active pieces linked to
-    /// each upcoming audition.
+    /// Average the preparation score of the readiness units of
+    /// each upcoming audition: each choice cluster counts once,
+    /// at its best member.
     pub fn audition_readiness(
         &self,
         today: &str,
@@ -797,26 +798,23 @@ impl App {
             if c.date.as_str() < today || !c.enrolled {
                 continue;
             }
-            let (mut sum, mut n) = (0.0f64, 0i64);
-            for p in pieces {
-                for pc in &p.auditions {
-                    if pc.id == c.id {
-                        sum += prep.get(&p.id).copied().unwrap_or(0.0);
-                        n += 1;
-                    }
-                }
-            }
-            if n == 0 {
+            let units = crate::prepmap::readiness_units(pieces, c.id, &prep);
+            if units.is_empty() {
                 continue;
             }
+            let mean = units.iter().map(|u| u.prep).sum::<f64>() / units.len() as f64;
+            let linked = pieces
+                .iter()
+                .filter(|p| p.auditions.iter().any(|pc| pc.id == c.id))
+                .count() as i64;
             let days = days_between(today, &c.date)?;
             out.push(ReadinessRow {
                 id: c.id,
                 name: c.name.clone(),
                 date: c.date.clone(),
                 days,
-                pieces: n,
-                pct: (sum / n as f64 * 100.0) as i64,
+                pieces: linked,
+                pct: (mean * 100.0) as i64,
             });
         }
         Ok(out)
@@ -4251,6 +4249,36 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].id, a2);
         assert_eq!(rows[0].pieces, 1);
+    }
+
+    #[test]
+    fn audition_readiness_counts_a_cluster_once_at_its_best() {
+        let app = test_app();
+        let a2 = seed_audition(&app, "2027-01-08", 3);
+        let p1 = seed_piece(&app, 1);
+        let p2 = seed_piece(&app, 1);
+        let p3 = seed_piece(&app, 1);
+        let p4 = seed_piece(&app, 1);
+        let p5 = seed_piece(&app, 1);
+        link_optional(&app, p1, a2);
+        link_optional(&app, p2, a2);
+        link_optional(&app, p3, a2);
+        link(&app, p4, a2);
+        link(&app, p5, a2);
+        // Zero-minute ratings carry confidence only: 0.6, 0.3.
+        seed_session(&app, "2026-10-19", p1, 0, 5, "");
+        seed_session(&app, "2026-10-19", p2, 0, 3, "");
+        // 36 minutes at confidence 5 is 0.8; 12 minutes at
+        // confidence 3 is 0.4. Both sit one day before today,
+        // so neither decays nor leaves the recent window.
+        seed_session(&app, "2026-10-19", p4, 36, 5, "");
+        seed_session(&app, "2026-10-19", p5, 12, 3, "");
+        let pieces = app.list_pieces(0, "", "").unwrap();
+        let rows = app.audition_readiness("2026-10-20", &pieces, "en").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, a2);
+        assert_eq!(rows[0].pieces, 5);
+        assert_eq!(rows[0].pct, 60, "mean over units: (0.6 + 0.8 + 0.4) / 3");
     }
 
     // ---------- coverage batch: forecaster ----------
