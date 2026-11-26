@@ -152,7 +152,7 @@
     "other": "%d giorni alla prova"
   },
   "readiness.last7": "Ultimi 7 giorni",
-  "readiness.note": "Media della sicurezza dei pezzi collegati a ciascun concorso.",
+  "readiness.note": "Media della sicurezza dei pezzi di ciascun concorso: ogni gruppo a scelta conta una volta sola, al suo pezzo più sicuro.",
   "readiness.study_time": "Tempo di studio",
   "readiness.tempo_label": "Pezzi al tempo obiettivo",
   "readiness.title": "Sicurezza per concorso",

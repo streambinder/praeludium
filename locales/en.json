@@ -152,7 +152,7 @@
     "other": "%d days to the audition"
   },
   "readiness.last7": "Last 7 days",
-  "readiness.note": "Average confidence of the pieces linked to each audition.",
+  "readiness.note": "Average confidence of the pieces of each audition: each choice group counts once, at its best-prepared piece.",
   "readiness.study_time": "Study time",
   "readiness.tempo_label": "Pieces at target tempo",
   "readiness.title": "Confidence by audition",

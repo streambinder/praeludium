@@ -152,7 +152,7 @@
     "other": "%d jours avant l'audition"
   },
   "readiness.last7": "7 derniers jours",
-  "readiness.note": "Confiance moyenne des morceaux liés à chaque audition.",
+  "readiness.note": "Confiance moyenne des morceaux de chaque audition : chaque groupe au choix compte une fois, avec son morceau le plus sûr.",
   "readiness.study_time": "Temps d'étude",
   "readiness.tempo_label": "Morceaux au tempo cible",
   "readiness.title": "Confiance par audition",
