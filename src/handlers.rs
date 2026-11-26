@@ -814,7 +814,7 @@ impl App {
                 date: c.date.clone(),
                 days,
                 pieces: linked,
-                pct: (mean * 100.0) as i64,
+                pct: crate::render::pct(mean),
             });
         }
         Ok(out)
@@ -4279,6 +4279,26 @@ mod tests {
         assert_eq!(rows[0].id, a2);
         assert_eq!(rows[0].pieces, 5);
         assert_eq!(rows[0].pct, 60, "mean over units: (0.6 + 0.8 + 0.4) / 3");
+    }
+
+    #[test]
+    fn audition_readiness_rounds_the_mean() {
+        let app = test_app();
+        let a2 = seed_audition(&app, "2027-01-08", 3);
+        let p1 = seed_piece(&app, 1);
+        let p2 = seed_piece(&app, 1);
+        let p3 = seed_piece(&app, 1);
+        link(&app, p1, a2);
+        link(&app, p2, a2);
+        link(&app, p3, a2);
+        // 0.6, 0.6 and 0.8 average to 2/3: rounded 67, truncated 66.
+        seed_session(&app, "2026-10-19", p1, 0, 5, "");
+        seed_session(&app, "2026-10-19", p2, 0, 5, "");
+        seed_session(&app, "2026-10-19", p3, 36, 5, "");
+        let pieces = app.list_pieces(0, "", "").unwrap();
+        let rows = app.audition_readiness("2026-10-20", &pieces, "en").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].pct, 67, "mean 2/3 rounds to 67, like the pins");
     }
 
     // ---------- coverage batch: forecaster ----------

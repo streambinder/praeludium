@@ -152,7 +152,7 @@
     "other": "%d Tage bis zum Probespiel"
   },
   "readiness.last7": "Letzte 7 Tage",
-  "readiness.note": "Durchschnittliche Sicherheit der mit jedem Probespiel verknüpften Stücke.",
+  "readiness.note": "Durchschnittliche Sicherheit der Stücke jedes Probespiels: Jede Wahlgruppe zählt einmal, mit ihrem sichersten Stück.",
   "readiness.study_time": "Übezeit",
   "readiness.tempo_label": "Stücke im Zieltempo",
   "readiness.title": "Sicherheit je Probespiel",

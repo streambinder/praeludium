@@ -152,7 +152,7 @@
     "other": "%d días para la audición"
   },
   "readiness.last7": "Últimos 7 días",
-  "readiness.note": "Seguridad media de las piezas vinculadas a cada audición.",
+  "readiness.note": "Seguridad media de las piezas de cada audición: cada grupo a elegir cuenta una sola vez, con su pieza más segura.",
   "readiness.study_time": "Tiempo de estudio",
   "readiness.tempo_label": "Piezas al tempo objetivo",
   "readiness.title": "Seguridad por audición",
