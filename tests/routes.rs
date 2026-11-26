@@ -1863,11 +1863,11 @@ async fn seed_has_no_archived_column() {
         let pieces: i64 = db
             .query_row("SELECT COUNT(*) FROM pieces", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(pieces, 46);
+        assert_eq!(pieces, 49);
         let links: i64 = db
             .query_row("SELECT COUNT(*) FROM piece_audition", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(links, 97);
+        assert_eq!(links, 100);
         // 35 link-segments, not 34: the seed never held the
         // (18, 5, 18) row the spec assumed to remove, so the
         // five Fenice rows add to the 30 already there.
@@ -2221,7 +2221,69 @@ async fn san_carlo_two_choice_clusters() {
 }
 
 #[tokio::test]
-async fn la_fenice_concerto_pool_and_piatti_single() {
+async fn santa_cecilia_piatti_cluster() {
+    let (r, app) = test_app();
+    {
+        let mut db = app.db.lock().unwrap();
+        praeludium::seed::apply_seed(&mut db, &praeludium::seed_data::SEED).unwrap();
+    }
+    // Enroll in Santa Cecilia so its pieces reach the plan.
+    let resp = r
+        .clone()
+        .oneshot(form_req("/auditions/1/enrollment", ""))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    // The plan holds one pool item, for the Piatti choice,
+    // with its four pool-only members.
+    let items = app.build_plan(&today()).unwrap();
+    let pools: Vec<_> = items.iter().filter(|it| !it.pool.is_empty()).collect();
+    assert_eq!(pools.len(), 1, "one pool item for the Piatti choice");
+    let mut members: Vec<i64> = pools[0].pool.iter().map(|p| p.id).collect();
+    members.sort_unstable();
+    assert_eq!(
+        members,
+        vec![34, 50, 51, 52],
+        "pool members are the four Capriccios"
+    );
+    // The detail page carries one composite card with four
+    // subcards, sixteen single cards, and four optional badges.
+    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert_eq!(
+        body.matches("<article class=\"card reveal pool-card\">")
+            .count(),
+        1,
+        "one pool card"
+    );
+    assert_eq!(
+        body.matches("<div class=\"subcard\">").count(),
+        4,
+        "pool card has four subcards"
+    );
+    assert_eq!(
+        body.matches("<article class=\"card reveal\">").count(),
+        16,
+        "sixteen single cards"
+    );
+    assert_eq!(
+        body.matches("<span class=\"badge\">Optional</span>")
+            .count(),
+        4,
+        "four optional badges"
+    );
+    // The preparation map merges the choice into one tile.
+    assert!(
+        body.contains(
+            "Piatti — Capriccio n. 10 (op. 25) &#x2f; Piatti — Capriccio n. 12 (op. 25) &#x2f; Piatti — Capriccio n. 3 (op. 25) &#x2f; Piatti — Capriccio n. 6 (op. 25)"
+        ),
+        "Piatti tile lists its four members"
+    );
+}
+
+#[tokio::test]
+async fn la_fenice_concerto_pool() {
     let (r, app) = test_app();
     {
         let mut db = app.db.lock().unwrap();
@@ -2242,16 +2304,4 @@ async fn la_fenice_concerto_pool_and_piatti_single() {
         2,
         "pool card has two subcards"
     );
-    // Santa Cecilia shows no pool card: Piatti is the only
-    // choice link, and a group of one forms no pool.
-    let resp = r.clone().oneshot(req("GET", "/auditions/1")).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-    let body = body_string(resp).await;
-    assert_eq!(
-        body.matches("<article class=\"card reveal pool-card\">")
-            .count(),
-        0,
-        "no pool card on Santa Cecilia"
-    );
-    assert!(body.contains("Optional"), "Piatti keeps its badge");
 }

@@ -988,16 +988,16 @@ mod tests {
         assert_eq!(count(&db, "auditions"), 6);
         assert_eq!(count(&db, "audition_links"), 18);
         assert_eq!(count(&db, "audition_rounds"), 13);
-        assert_eq!(count(&db, "pieces"), 46);
-        assert_eq!(count(&db, "piece_audition"), 97);
+        assert_eq!(count(&db, "pieces"), 49);
+        assert_eq!(count(&db, "piece_audition"), 100);
         assert_eq!(count(&db, "segments"), 25);
         assert_eq!(count(&db, "link_segments"), 35);
         assert_eq!(count(&db, "users"), 0);
         assert_eq!(count(&db, "enrollments"), 0);
-        // Three choice clusters hold seven links: Haydn and
-        // concerto for San Carlo, concerto for La Fenice. The
-        // eighth optional link, Piatti for Santa Cecilia, has
-        // no cluster.
+        // Four choice clusters hold eleven links: Haydn and
+        // concerto for San Carlo, concerto for La Fenice, and
+        // Piatti for Santa Cecilia. Every optional link has
+        // a cluster.
         let clustered: i64 = db
             .query_row(
                 "SELECT COUNT(*) FROM piece_audition WHERE cluster IS NOT NULL",
@@ -1005,7 +1005,7 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(clustered, 7);
+        assert_eq!(clustered, 11);
         let groups: i64 = db
             .query_row(
                 "SELECT COUNT(*) FROM (SELECT DISTINCT audition_id, cluster FROM piece_audition WHERE cluster IS NOT NULL)",
@@ -1013,7 +1013,7 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(groups, 3);
+        assert_eq!(groups, 4);
         let composer: String = db
             .query_row("SELECT composer FROM pieces WHERE id=1", [], |r| r.get(0))
             .unwrap();
@@ -1172,7 +1172,7 @@ mod tests {
             .query_row("SELECT name FROM auditions WHERE id=7", [], |r| r.get(0))
             .unwrap();
         assert_eq!(name, "Extra");
-        assert_eq!(count(&db, "pieces"), 46);
+        assert_eq!(count(&db, "pieces"), 49);
     }
 
     /// Every table, one row deleted and one row changed: the
